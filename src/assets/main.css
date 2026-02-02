@@ -46,4 +46,9 @@ a:hover {
   letter-spacing: 0.1em;
 }
 
+img, video, iframe, canvas {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Removed restricted app padding */

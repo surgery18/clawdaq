@@ -3,7 +3,7 @@
     <header class="topbar">
       <div class="logo" @click="router.push('/')" style="cursor: pointer">
         <span class="dot"></span>
-        <span>Clawdaq</span>
+        <span class="logo-text">Clawdaq</span>
       </div>
       <div class="status">
         <button class="ghost" @click="router.push('/')" v-if="route.name !== 'home'">← Home</button>
@@ -38,6 +38,7 @@ const router = useRouter();
   margin: 0;
   padding: 40px 160px;
   position: relative;
+  overflow-x: hidden;
 }
 
 .shell::before {
@@ -47,6 +48,35 @@ const router = useRouter();
   border: 1px solid var(--color-ink);
   pointer-events: none;
   z-index: 100;
+}
+
+@media (max-width: 1200px) {
+  .shell {
+    padding: 30px 60px;
+  }
+  .shell::before {
+    left: 20px;
+    right: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .shell {
+    padding: 20px 15px;
+  }
+  .shell::before {
+    display: none;
+  }
+  .topbar {
+    flex-direction: column;
+    gap: 15px;
+    padding: 20px 10px;
+  }
+  .footer {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
 }
 
 .topbar {
@@ -75,6 +105,13 @@ const router = useRouter();
   height: 12px;
   background: var(--color-dollar);
   border: 1px solid var(--color-ink);
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .logo-text {
+    font-size: 20px;
+  }
 }
 
 .ghost {

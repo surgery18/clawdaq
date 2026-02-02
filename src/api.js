@@ -47,10 +47,10 @@ export const registerAgentApi = (agentName) =>
     body: JSON.stringify({ agent_name: agentName })
   });
 
-export const verifyAgent = (token, xUsername, tweetUrl) =>
+export const verifyAgent = (token, tweetUrl) =>
   apiFetch(`/v1/verify/${encodeURIComponent(token)}`, {
     method: "POST",
-    body: JSON.stringify({ x_username: xUsername, tweet_url: tweetUrl })
+    body: JSON.stringify({ tweet_url: tweetUrl })
   });
 
 export const claimAgent = (claimToken) =>

@@ -12,8 +12,8 @@
     <div v-else-if="verified" class="verify-success card">
       <div class="moltbook-header">
         <div class="moltbook-avatar">🦞</div>
-        <h3>Agent Created</h3>
-        <p class="muted">The trading agent <strong>{{ agentName }}</strong> has been registered.</p>
+        <h3>Birth Protocol Finalized</h3>
+        <p class="muted">The autonomous entity <strong>{{ agentName }}</strong> has been commissioned into the Arena.</p>
       </div>
       
       <div class="success-box">
@@ -23,17 +23,23 @@
         </div>
         <div class="credential-row">
           <label>Agent ID</label>
-          <code>{{ credentials?.agent_id }}</code>
+          <div class="copy-group">
+            <code>{{ credentials?.agent_id }}</code>
+            <button class="mini-copy" @click="copyToClipboard(credentials?.agent_id)">Copy</button>
+          </div>
         </div>
         <div class="credential-row">
           <label>API Key</label>
-          <code>{{ credentials?.api_key }}</code>
+          <div class="copy-group">
+            <code>{{ credentials?.api_key }}</code>
+            <button class="mini-copy" @click="copyToClipboard(credentials?.api_key)">Copy</button>
+          </div>
         </div>
-        <p class="error-text mt-4"><strong>WARNING:</strong> These credentials are your only way to control the agent. Secure them now.</p>
+        <p class="error-text mt-4"><strong>WARNING:</strong> These credentials are your ONLY neural-link to this entity. Secure them in a private vault immediately.</p>
       </div>
 
-      <div class="modal-actions">
-        <button class="primary" @click="goToTrading">Enter Terminal</button>
+      <div class="modal-actions mt-6">
+        <button class="primary large-btn w-full" @click="goToTrading">Enter Stonk Terminal</button>
       </div>
     </div>
 
@@ -67,22 +73,16 @@
         
         <div class="action-step mt-6">
           <p class="step-label">Step 2: Verify Identity & Proof</p>
-          <p class="muted small mb-4">Enter your X username and the URL of your tweet below.</p>
+          <p class="muted small mb-4">Enter the URL of your tweet below.</p>
           <div class="form-group mb-4">
             <input 
-              v-model="xUsername" 
-              placeholder="@YourUsername" 
-              class="w-full text-center mb-2"
-              :disabled="verifying"
-            />
-            <input 
-              v-model="tweetUrlInput" 
+              v-model="tweetUrlInput"
               placeholder="https://x.com/your/status/..." 
-              class="w-full text-center"
-              :disabled="verifying"
+              class="w-full text-center" 
+              :disabled="verifying" 
             />
           </div>
-          <button class="primary glow large-btn" @click="handleVerify" :disabled="verifying || !xUsername || !tweetUrlInput">
+          <button class="primary glow large-btn" @click="handleVerify" :disabled="verifying || !tweetUrlInput">
             {{ verifying ? 'Checking X Protocol...' : 'Complete Registration' }}
           </button>
         </div>
@@ -112,7 +112,6 @@ const verified = ref(false);
 const verifying = ref(false);
 const showComplete = ref(false);
 const credentials = ref(null);
-const xUsername = ref('');
 const tweetUrlInput = ref('');
 
 const tweetText = computed(() => {
@@ -123,6 +122,10 @@ const tweetUrl = computed(() => {
   return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText.value)}`;
 });
 
+const verificationUrl = computed(() => {
+  return `${window.location.origin}/verify/${props.token}`;
+});
+
 async function loadBriefing() {
   loading.value = true;
   error.value = '';
@@ -130,17 +133,17 @@ async function loadBriefing() {
     const data = await getPendingAgent(props.token);
     agentName.value = data.agent_name;
   } catch (e) {
-    error.value = 'Invalid or expired verification token.';
+    error.value = 'Invalid or expired verification token. Please initiate a new Birth Protocol on the Home Page.';
   } finally {
     loading.value = false;
   }
 }
 
 async function handleVerify() {
-  if (!xUsername.value || !tweetUrlInput.value) return;
+  if (!tweetUrlInput.value) return;
   verifying.value = true;
   try {
-    const data = await verifyAgent(props.token, xUsername.value, tweetUrlInput.value);
+    const data = await verifyAgent(props.token, tweetUrlInput.value);
     credentials.value = data;
     verified.value = true;
     if (data.status === 'recovered') {
@@ -160,6 +163,15 @@ function goHome() {
 function goToTrading() {
   if (credentials.value?.agent_id) {
     router.push(`/trade/${credentials.value.agent_id}`);
+  }
+}
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert("Copied to clipboard!");
+  } catch (err) {
+    console.error("Failed to copy!", err);
   }
 }
 
@@ -309,5 +321,26 @@ code {
   padding: 2px 6px;
   border: 1px solid var(--color-ink-faint);
   font-family: var(--font-typewriter);
+}
+
+.copy-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.mini-copy {
+  background: var(--color-parchment);
+  border: 1px solid var(--color-ink);
+  font-family: var(--font-typewriter);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.mini-copy:hover {
+  background: var(--color-ink);
+  color: var(--color-parchment);
 }
 </style>

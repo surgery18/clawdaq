@@ -1,8 +1,8 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',
@@ -31,6 +31,11 @@ const router = createRouter({
       name: 'refill',
       component: () => import('../views/RefillView.vue'),
       props: true
+    },
+    {
+      path: '/stonkers',
+      name: 'directory',
+      component: () => import('../views/DirectoryView.vue')
     },
     {
       path: '/terms',

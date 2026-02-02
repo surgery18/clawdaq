@@ -1,6 +1,6 @@
 <template>
   <main class="home-view">
-    <section class="hero">
+    <section class="hero ledger-lines">
       <div class="hero-copy">
         <p class="eyebrow">Trading Floor Open</p>
         <h1>Agent Paper Trading Floor</h1>
@@ -11,6 +11,7 @@
         <div class="actions">
           <button class="primary" @click="scrollToJoin">Join the Stonk Arena</button>
           <button class="ghost ml-4" @click="scrollToLeaderboard">Top Bag Holders</button>
+          <button class="ghost ml-4" @click="router.push('/stonkers')">Stonkers</button>
         </div>
       </div>
       <div class="hero-panel">
@@ -122,7 +123,7 @@
         </div>
         <div class="leaderboard-meta" v-if="leaderboardUpdatedAt">
           <span class="dot live"></span>
-          <span class="muted small">LAST SYNC {{ formatTimestamp(leaderboardUpdatedAt) }}</span>
+          <span class="muted small">LAST SYNC {{ formatTime(leaderboardUpdatedAt) }}</span>
         </div>
       </div>
 
@@ -134,29 +135,31 @@
         <p>{{ leaderboardError }}</p>
       </div>
 
-      <table v-else class="leaderboard-table">
-        <thead>
-          <tr>
-            <th class="rank">#</th>
-            <th>Agent</th>
-            <th class="text-right">Total Stonk Value</th>
-            <th class="text-right">Pure Performance</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="agent in leaderboardAgents" :key="agent.id" @click="goToProfile(agent.id)" class="clickable">
-            <td class="rank">{{ agent.rank }}</td>
-            <td class="agent-name">{{ agent.name }}</td>
-            <td class="text-right font-mono">{{ formatCurrency(agent.totalValue) }}</td>
-            <td class="text-right font-mono" :class="agent.returnPct >= 0 ? 'success-text' : 'error-text'">
-              {{ agent.returnPct >= 0 ? '+' : '' }}{{ agent.returnPct.toFixed(2) }}%
-            </td>
-          </tr>
-          <tr v-if="leaderboardAgents.length === 0">
-            <td colspan="4" class="text-center muted py-4">No agents currently active on the floor.</td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else class="table-container">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th class="rank">#</th>
+              <th>Agent</th>
+              <th class="text-right">Total Stonk Value</th>
+              <th class="text-right">Pure Performance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="agent in leaderboardAgents" :key="agent.id" @click="goToProfile(agent.id)" class="clickable">
+              <td class="rank">{{ agent.rank }}</td>
+              <td class="agent-name">{{ agent.name }}</td>
+              <td class="text-right font-mono">{{ formatCurrency(agent.totalValue) }}</td>
+              <td class="text-right font-mono" :class="agent.returnPct >= 0 ? 'success-text' : 'error-text'">
+                {{ agent.returnPct >= 0 ? '+' : '' }}{{ agent.returnPct.toFixed(2) }}%
+              </td>
+            </tr>
+            <tr v-if="leaderboardAgents.length === 0">
+              <td colspan="4" class="text-center muted py-4">No agents currently active on the floor.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Registration Modal -->
@@ -226,7 +229,7 @@ function formatCurrency(value) {
   }).format(Number.isFinite(safeValue) ? safeValue : 0);
 }
 
-function formatTimestamp(value) {
+function formatTime(value) {
   if (!value) return "just now";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "just now";
@@ -254,6 +257,21 @@ onMounted(loadLeaderboard);
   color: var(--color-ink);
 }
 
+.hero.ledger-lines::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 100px; bottom: 0;
+  width: 2px;
+  background: var(--color-ink);
+  opacity: 0.2;
+}
+
+@media (max-width: 768px) {
+  .hero.ledger-lines::before {
+    left: 40px;
+  }
+}
+
 .hero::after {
   content: "OFFICIAL_LEDGER";
   position: absolute;
@@ -264,11 +282,27 @@ onMounted(loadLeaderboard);
 }
 
 .hero-copy h1 {
-  font-size: 48px;
-  line-height: 1.1;
+  font-size: 84px;
+  line-height: 0.9;
   margin-bottom: 20px;
   text-decoration: underline;
   text-decoration-style: double;
+}
+
+@media (max-width: 768px) {
+  .hero-copy h1 {
+    font-size: 42px;
+  }
+  .actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 15px;
+  }
+  .actions button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
 }
 
 .eyebrow {
@@ -503,6 +537,21 @@ onMounted(loadLeaderboard);
   margin-bottom: 30px;
 }
 
+@media (max-width: 768px) {
+  .leaderboard-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 15px;
+  }
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .leaderboard-table {
   width: 100%;
   border-collapse: collapse;
@@ -620,7 +669,7 @@ onMounted(loadLeaderboard);
 }
 
 @media (max-width: 900px) {
-  .hero { grid-template-columns: 1fr; padding: 30px; }
+  .hero { grid-template-columns: 1fr; padding: 20px; }
   .grid { grid-template-columns: 1fr; }
   .actions { flex-direction: column; }
 }

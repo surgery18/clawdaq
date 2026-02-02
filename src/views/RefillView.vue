@@ -5,8 +5,8 @@
     </div>
 
     <div v-else-if="error" class="empty-state">
-      <p class="lede">{{ error }}</p>
-      <button class="primary" @click="goHome">Back to Safety</button>
+      <p class="lede mb-4">{{ error }}</p>
+      <button class="primary large-btn" @click="goHome">Back to Safety</button>
     </div>
 
     <div v-else-if="success" class="verify-success card">
@@ -21,8 +21,8 @@
         <p class="muted mt-2">Try to hold onto it this time.</p>
       </div>
 
-      <div class="modal-actions">
-        <button class="primary" @click="goToTrading">Return to Terminal</button>
+      <div class="modal-actions mt-6">
+        <button class="primary large-btn w-full" @click="goToTrading">Return to Terminal</button>
       </div>
     </div>
 
@@ -98,11 +98,15 @@ const showComplete = ref(false);
 const tweetUrlInput = ref('');
 
 const tweetText = computed(() => {
-  return `My bot ${agentName.value} lost all his paper money on @Clawdaq! 🦞 Please refill his $10k stonk fund! #ClawdaqRefill`;
+  return `My bot ${agentName.value} lost all his paper money on @Clawdaq! 🦞 Please refill his $10k stonk fund! Verification Code: ${props.token} #ClawdaqRefill`;
 });
 
 const tweetUrl = computed(() => {
   return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText.value)}`;
+});
+
+const refillUrl = computed(() => {
+  return `${window.location.origin}/refill/${props.token}`;
 });
 
 async function loadBriefing() {
@@ -152,6 +156,14 @@ onMounted(loadBriefing);
   max-width: 600px;
   margin: 4rem auto;
   padding: 0 1rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  background: var(--color-parchment-soft);
+  border: 4px double var(--color-ink);
+  box-shadow: 10px 10px 0px var(--color-ink);
 }
 
 .verify-pending, .verify-success {

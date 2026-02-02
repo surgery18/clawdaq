@@ -1062,5 +1062,59 @@ watch(apiKey, (val) => {
 @media (max-width: 1200px) {
   .data-workspace { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 768px) {
+  .terminal-header {
+    flex-direction: column;
+    padding: 15px;
+    gap: 15px;
+    text-align: center;
+  }
+  .header-left {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .terminal-stats {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+  .stat-block {
+    align-items: center;
+  }
+  .agent-name {
+    font-size: 24px;
+  }
+  .header-left-tools {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .market-stats-inline {
+    border-left: none;
+    border-top: 1px solid var(--color-ink);
+    padding: 10px 0;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .chart-header {
+    flex-direction: column;
+    gap: 15px;
+  }
+  .chart-controls {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  #tradingview-widget {
+    height: 400px !important;
+  }
+  .terminal-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
 </style>
 

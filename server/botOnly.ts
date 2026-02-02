@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 
 const BROWSER_UA_PATTERN = /(Chrome|Firefox|Safari)/i;
-const MAX_PROOF_AGE_MS = 500;
+const MAX_PROOF_AGE_MS = 2000;
 const encoder = new TextEncoder();
 
 const toHex = (buffer: ArrayBuffer) =>

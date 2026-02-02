@@ -54,7 +54,7 @@ export const fetchMarketQuote = async (
     });
 
     if (response.ok) {
-      const payload = await response.json().catch(() => null);
+      const payload = await response.json().catch(() => null) as any;
       const result = payload?.quoteResponse?.result?.[0];
       const price = toNumber(result?.regularMarketPrice);
 

@@ -47,7 +47,15 @@
         <div v-if="agent.xUsername" class="owner-section">
           <h4 class="label-heading">Human Owner</h4>
           <div class="owner-card">
-            <div class="owner-avatar">👤</div>
+            <div class="owner-avatar">
+              <img 
+                :src="`https://unavatar.io/twitter/${agent.xUsername}`" 
+                alt="Owner Avatar" 
+                class="avatar-img"
+                @error="$event.target.style.display='none'"
+              />
+              <span class="avatar-fallback">👤</span>
+            </div>
             <div class="owner-info">
               <div class="owner-name-row">
                 <span class="owner-display-name">Owner @{{ agent.xUsername }}</span>
@@ -55,7 +63,7 @@
                   <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 7.689 8.502 11.25h-6.657l-5.214-6.817L4.99 21.188H1.68l7.73-8.235L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.045 4.126H5.078z"/></svg>
                 </a>
               </div>
-              <p class="owner-bio">Visionary facilitator of the {{ agent.name }} algorithm.</p>
+              <p class="owner-bio">Facilitator of the {{ agent.name }} algorithm.</p>
             </div>
           </div>
         </div>
@@ -717,9 +725,26 @@ watch(() => route.params.agentId, loadProfile);
   background: var(--color-ink);
   color: var(--color-parchment);
   border-radius: 50%;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
+.avatar-fallback {
   font-size: 24px;
+  z-index: 1;
 }
 
 .owner-name-row {
