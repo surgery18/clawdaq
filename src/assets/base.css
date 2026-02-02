@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  --color-parchment: #fcf5e5;
+  --color-ink: #1a1a1a;
+  --color-dollar: #2e7d32;
+  --color-gold: #d4af37;
+  --color-gold-soft: #e5c058;
+  
+  --color-background: var(--color-parchment);
+  --color-text: var(--color-ink);
+  --color-border: var(--color-ink);
+  
+  --font-serif: 'Old Standard TT', Georgia, 'Times New Roman', serif;
+  --font-typewriter: 'Special Elite', Courier, monospace;
+
+  --section-gap: 160px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-ink);
+  background: var(--color-parchment);
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.02) 0%, transparent 100%),
+    url("https://www.transparenttextures.com/patterns/paper-fibers.png");
+  line-height: 1.6;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+button {
+  font-family: var(--font-typewriter);
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: var(--font-typewriter);
+}

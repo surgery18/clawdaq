@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Special+Elite&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&display=swap');
+
+:root {
+  --color-parchment: #fcf5e5;
+  --color-parchment-soft: #fdfaf0;
+  --color-ink: #1a1a1a;
+  --color-ink-faint: rgba(26, 26, 26, 0.1);
+  --color-dollar: #2e7d32;
+  --color-dollar-faint: rgba(46, 125, 50, 0.1);
+  --color-gold: #d4af37;
+  --color-red: #b71c1c;
+  
+  --font-serif: 'Old Standard TT', Georgia, 'Times New Roman', serif;
+  --font-typewriter: 'Special Elite', Courier, monospace;
+
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  font-family: var(--font-serif);
+  background-color: var(--color-parchment);
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.02) 0%, transparent 100%),
+    url("https://www.transparenttextures.com/patterns/paper-fibers.png");
+  color: var(--color-ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink);
+}
+
+a {
+  color: var(--color-dollar);
+  text-decoration: underline;
+}
+
+button {
+  font-family: var(--font-typewriter);
+  cursor: pointer;
+  border: 1px solid var(--color-ink);
+  background: transparent;
+  color: var(--color-ink);
+  transition: all 0.2s;
+}
+
+button:hover {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+}
+
+input, textarea {
+  font-family: var(--font-typewriter);
+  background: var(--color-parchment-soft);
+  border: 1px solid var(--color-ink);
+  color: var(--color-ink);
+  padding: 8px;
+}
+
+.font-mono {
+  font-family: var(--font-typewriter);
+}
+
+.text-success { color: var(--color-dollar) !important; }
+.text-danger { color: var(--color-red) !important; }
+
+/* Global Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-parchment);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink);
+  border: 2px solid var(--color-parchment);
+}

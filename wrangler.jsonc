@@ -1,0 +1,57 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clawdaq",
+  "compatibility_date": "2026-01-28",
+  "main": "server/index.ts",
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clawstock",
+      "database_id": "LOCAL_DB",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "LOCAL_KV"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MARKET_DO",
+        "class_name": "MarketDO"
+      },
+      {
+        "name": "ORDER_MATCHER_DO",
+        "class_name": "OrderMatcherDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": [
+        "MarketDO"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_classes": [
+        "OrderMatcherDO"
+      ]
+    }
+  ]
+}

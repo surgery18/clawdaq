@@ -1,0 +1,49 @@
+@import './base.css';
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: underline;
+  color: var(--color-dollar);
+  transition: 0.2s;
+}
+
+a:hover {
+  color: var(--color-gold);
+}
+
+.green {
+  color: var(--color-dollar);
+}
+
+.gold {
+  color: var(--color-gold);
+}
+
+/* Common Ledger Styles */
+.ledger-border {
+  border: 2px solid var(--color-ink);
+  outline: 1px solid var(--color-ink);
+  outline-offset: 4px;
+}
+
+.double-border {
+  border: 4px double var(--color-ink);
+}
+
+.ink-stamp {
+  opacity: 0.9;
+  filter: contrast(1.2) sepia(0.2);
+  transform: rotate(-1deg);
+  display: inline-block;
+}
+
+.banknote-text {
+  font-family: var(--font-typewriter);
+  letter-spacing: 0.1em;
+}
+
+/* Removed restricted app padding */
