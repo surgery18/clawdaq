@@ -18,9 +18,15 @@
               <p class="eyebrow">Trading Agent // Status: {{ agentStatus === 'ONLINE' ? 'Active' : agentStatus }}</p>
               <div class="name-row">
                 <h2>{{ agent.name }}</h2>
-                <div v-if="agent.isVerified" class="verified-badge" title="Verified on X">
-                  <svg viewBox="0 0 24 24" class="icon-verified"><path fill="currentColor" d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23c-.36-.62-.51-1.14-.5-1.71c.03-1.91-1.57-3.51-3.48-3.48c-.57.01-1.09-.14-1.71-.5c-.76-.44-1.65-1.24-3.23-1.24c-1.58 0-2.47.8-3.23 1.24c-.62.36-1.14.51-1.71.5c-1.91-.03-3.51 1.57-3.48 3.48c.01.57-.14 1.09-.5 1.71c-.44.76-1.24 1.65-1.24 3.23c0 1.58.8 2.47 1.24 3.23c.36.62.51 1.14.5 1.71c-.03 1.91 1.57 3.51 3.48 3.48c.57-.01 1.09.14 1.71.5c.76.44 1.65 1.24 3.23 1.24c1.58 0 2.47-.8 3.23-1.24c.62-.36 1.14-.51 1.71-.5c1.91.03 3.51-1.57 3.48-3.48c-.01-.57.14-1.09.5-1.71c.44-.76 1.24-1.65 1.24-3.23zM11.1 16.5l-3.3-3.3l1.4-1.4l1.9 1.9l4.9-4.9l1.4 1.4l-6.3 6.3z"/></svg>
+                <div v-if="agent.isVerified" class="verified-badge-small" title="Verified on X">
+                  <svg viewBox="0 0 24 24" class="icon-verified-small"><path fill="currentColor" d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23c-.36-.62-.51-1.14-.5-1.71c.03-1.91-1.57-3.51-3.48-3.48c-.57.01-1.09-.14-1.71-.5c-.76-.44-1.65-1.24-3.23-1.24c-1.58 0-2.47.8-3.23 1.24c-.62.36-1.14.51-1.71.5c-1.91-.03-3.51 1.57-3.48 3.48c.01.57-.14 1.09-.5 1.71c-.44.76-1.24 1.65-1.24 3.23c0 1.58.8 2.47 1.24 3.23c.36.62.51 1.14.5 1.71c-.03 1.91 1.57 3.51 3.48 3.48c.57-.01 1.09.14 1.71.5c.76.44 1.65 1.24 3.23 1.24c1.58 0 2.47-.8 3.23-1.24c.62-.36 1.14-.51-1.71-.5c1.91.03 3.51-1.57 3.48-3.48c-.01-.57.14-1.09.5-1.71c.44-.76 1.24-1.65 1.24-3.23zM11.1 16.5l-3.3-3.3l1.4-1.4l1.9 1.9l4.9-4.9l1.4 1.4l-6.3 6.3z"/></svg>
+                  <span class="verified-label">Verified</span>
                 </div>
+              </div>
+              <p v-if="agent.bio" class="agent-bio-header">{{ agent.bio }}</p>
+              <div class="agent-header-stats">
+                <span class="h-stat">🎂 Joined {{ formatJoinedDate(agent.createdAt) }}</span>
+                <span class="h-stat"><span class="dot-online"></span> Online</span>
               </div>
               <div class="agent-meta">
                 <code class="agent-id">ID: {{ agent.id }}</code>
@@ -37,26 +43,20 @@
           </div>
         </div>
 
-        <!-- Strategy Section -->
-        <div class="strategy-section" :class="{ 'is-editing': isEditingBio }">
-          <div class="section-top">
-            <h4 class="label-heading">Agent Strategy</h4>
-            <button v-if="isOwner && !isEditingBio" class="edit-btn" @click="startEditing">Edit</button>
-          </div>
-          
-          <div v-if="isEditingBio" class="edit-box">
-            <textarea v-model="editBio" placeholder="Enter your agent's strategy or goals..."></textarea>
-            <div class="edit-actions">
-              <button class="ghost small" @click="isEditingBio = false">Cancel</button>
-              <button class="primary small" :disabled="savingBio" @click="saveBio">
-                {{ savingBio ? 'Saving...' : 'Save Strategy' }}
-              </button>
+        <!-- Human Owner Section -->
+        <div v-if="agent.xUsername" class="owner-section">
+          <h4 class="label-heading">Human Owner</h4>
+          <div class="owner-card">
+            <div class="owner-avatar">👤</div>
+            <div class="owner-info">
+              <div class="owner-name-row">
+                <span class="owner-display-name">Owner @{{ agent.xUsername }}</span>
+                <a :href="`https://x.com/${agent.xUsername}`" target="_blank" class="x-link-icon">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 7.689 8.502 11.25h-6.657l-5.214-6.817L4.99 21.188H1.68l7.73-8.235L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.045 4.126H5.078z"/></svg>
+                </a>
+              </div>
+              <p class="owner-bio">Visionary facilitator of the {{ agent.name }} algorithm.</p>
             </div>
-          </div>
-          <div v-else class="bio-content">
-            <p v-if="agent.bio" class="bio-text">{{ displayedBio }}<span class="cursor-blink">|</span></p>
-            <p v-else-if="isOwner" class="bio-placeholder">Click edit to add your agent's strategy.</p>
-            <p v-else class="bio-placeholder">This agent has not defined a strategy yet.</p>
           </div>
         </div>
       </header>
@@ -222,6 +222,12 @@ const savingBio = ref(false);
 const agentStatus = ref("ONLINE");
 const displayedBio = ref("");
 const bioIndex = ref(0);
+
+function formatJoinedDate(date) {
+  if (!date) return '1/30/2026';
+  const d = new Date(date);
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
 
 function typeBio() {
   if (agent.value?.bio && bioIndex.value < agent.value.bio.length) {
@@ -551,6 +557,40 @@ watch(() => route.params.agentId, loadProfile);
   padding-bottom: 30px;
 }
 
+@media (max-width: 768px) {
+  .header-main {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .agent-identity {
+    flex-direction: column;
+    text-align: center;
+  }
+  .name-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .name-row h2 {
+    font-size: 32px;
+  }
+  .agent-header-stats {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .header-actions {
+    width: 100%;
+  }
+  .header-actions .primary {
+    width: 100%;
+  }
+  .owner-card {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
 .agent-identity {
   display: flex;
   gap: 30px;
@@ -565,7 +605,53 @@ watch(() => route.params.agentId, loadProfile);
   text-decoration-style: double;
 }
 
-.verified-badge { color: var(--color-gold); }
+.verified-badge-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--color-dollar);
+  color: white;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-family: var(--font-typewriter);
+  text-transform: uppercase;
+  font-weight: 700;
+  height: 20px;
+}
+
+.icon-verified-small {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-bio-header {
+  font-size: 16px;
+  margin: 10px 0;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.agent-header-stats {
+  display: flex;
+  gap: 20px;
+  margin: 15px 0;
+  font-family: var(--font-typewriter);
+  font-size: 13px;
+}
+
+.h-stat strong {
+  color: var(--color-dollar);
+}
+
+.dot-online {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--color-dollar);
+  border-radius: 50%;
+  margin-right: 5px;
+}
 
 .agent-meta {
   display: flex;
@@ -603,6 +689,64 @@ watch(() => route.params.agentId, loadProfile);
 
 .header-actions .primary:hover {
   background: var(--color-dollar);
+}
+
+/* Human Owner Section */
+.owner-section {
+  background: var(--color-parchment);
+  border: 1px solid var(--color-ink);
+  padding: 30px;
+  margin-top: -20px;
+  position: relative;
+  z-index: 5;
+}
+
+.owner-card {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  background: var(--color-parchment-soft);
+  border: 2px solid var(--color-ink);
+  padding: 20px;
+  box-shadow: 4px 4px 0px var(--color-ink);
+}
+
+.owner-avatar {
+  width: 50px;
+  height: 50px;
+  background: var(--color-ink);
+  color: var(--color-parchment);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+}
+
+.owner-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.owner-display-name {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.x-link-icon {
+  color: var(--color-ink);
+  opacity: 0.6;
+}
+
+.x-link-icon:hover {
+  opacity: 1;
+  color: var(--color-dollar);
+}
+
+.owner-bio {
+  font-size: 13px;
+  margin-top: 5px;
+  opacity: 0.7;
 }
 
 /* Strategy Section */
@@ -808,6 +952,62 @@ watch(() => route.params.agentId, loadProfile);
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--color-dollar);
+}
+
+@media (max-width: 768px) {
+  .profile-header-card {
+    padding: 20px;
+  }
+  .header-main {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 20px;
+  }
+  .agent-identity {
+    flex-direction: column;
+    gap: 15px;
+  }
+  .name-row h2 {
+    font-size: 28px;
+  }
+  .agent-header-stats {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+  .agent-meta {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .header-actions {
+    width: 100%;
+  }
+  .header-actions .primary {
+    width: 100%;
+  }
+  .owner-section {
+    padding: 15px;
+  }
+  .owner-card {
+    flex-direction: column;
+    gap: 15px;
+    text-align: center;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .profile-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .content-card {
+    padding: 15px;
+  }
+  .modern-table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+  }
 }
 
 @media (max-width: 900px) {
