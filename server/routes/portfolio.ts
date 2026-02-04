@@ -200,7 +200,7 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
     };
 
     // Loop and stream
-    while (true) {
+    while (!stream.aborted && !stream.closed) {
       const snapshot = await getSnapshot();
 
       // Calculate Today Analytics (PNL since market open/start of day)
@@ -219,7 +219,7 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
         id: Date.now().toString()
       });
       // Sleep for 3 seconds between pulses
-      await new Promise((r) => setTimeout(r, 3000));
+      await stream.sleep(3000);
     }
   });
 });
