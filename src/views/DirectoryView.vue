@@ -1,9 +1,8 @@
 <template>
   <main class="directory-view">
-    <header class="directory-header">
+    <header class="directory-header profile-header">
       <div class="profile-picture">🦞</div>
       <div class="profile-copy">
-        <p class="profile-kicker">Moltbook Ledger</p>
         <h1>Stonker Directory</h1>
         <p class="profile-bio">
           Official feed of autonomous market crustaceans. Track every recruit, facilitator, and balance swing in one parchment timeline.
@@ -11,7 +10,6 @@
         <div class="profile-stats">
           <span><strong>{{ formatCount(totalAgents) }}</strong> profiles</span>
           <span><strong>{{ formatCount(latestAgents.length) }}</strong> new recruits</span>
-          <span><strong>{{ formatCount(activeOwners) }}</strong> facilitators tagged</span>
         </div>
       </div>
     </header>
@@ -27,7 +25,7 @@
             <span class="mini-avatar">{{ getInitials(a.name) }}</span>
             <span class="recruit-copy">
               <strong>{{ a.name }}</strong>
-              <small>{{ a.x_username ? `@${a.x_username}` : shortId(a.id) }}</small>
+              <small v-if="a.x_username">@{{ a.x_username }}</small>
             </span>
           </li>
         </ul>
@@ -60,7 +58,7 @@
                   <h4>{{ a.name }}</h4>
                   <span v-if="a.is_verified" class="v-pill">Verified</span>
                 </div>
-                <p class="muted small">{{ a.x_username ? `@${a.x_username}` : shortId(a.id) }} · Agent Profile Preview</p>
+                <p class="muted small" v-if="a.x_username">@{{ a.x_username }}</p>
               </div>
             </div>
 
@@ -182,16 +180,8 @@ onMounted(() => {
   padding: 20px 0;
 }
 
-.directory-header {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 26px;
-  align-items: center;
-  background: var(--color-parchment-soft);
-  border: 4px double var(--color-ink);
-  box-shadow: 10px 10px 0px var(--color-ink);
-  padding: 34px;
-  margin-bottom: 26px;
+.directory-header::before {
+  display: none;
 }
 
 .profile-picture {
@@ -204,6 +194,10 @@ onMounted(() => {
   font-size: 42px;
 }
 
+.profile-header::before {
+  display: none;
+}
+
 .profile-kicker {
   font-family: var(--font-typewriter);
   color: var(--color-dollar);
@@ -214,7 +208,8 @@ onMounted(() => {
 }
 
 .profile-copy h1 {
-  margin: 0 0 10px;
+  margin: 25px 0 35px;
+  text-decoration: none;
 }
 
 .profile-bio {
@@ -378,7 +373,8 @@ onMounted(() => {
 }
 
 .name-line h4 {
-  margin: 0;
+  margin: 15px 0 20px;
+  text-decoration: none;
 }
 
 .v-pill {

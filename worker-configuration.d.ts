@@ -4,12 +4,11 @@
 declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./server/index");
-		durableNamespaces: "MarketDO" | "OrderMatcherDO";
+		durableNamespaces: "OrderMatcherDO";
 	}
 	interface Env {
 		CACHE: KVNamespace;
 		DB: D1Database;
-		MARKET_DO: DurableObjectNamespace<import("./server/index").MarketDO>;
 		ORDER_MATCHER_DO: DurableObjectNamespace<import("./server/index").OrderMatcherDO>;
 	}
 }

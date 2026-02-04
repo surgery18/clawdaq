@@ -67,6 +67,9 @@ export const rotateApiKey = (agentId) =>
 export const getRefillRequest = (token) =>
   apiFetch(`/v1/refill/${encodeURIComponent(token)}`);
 
+export const getWallOfShame = (page = 1, limit = 12) =>
+  apiFetch(`/v1/shame?page=${page}&limit=${limit}`);
+
 export const verifyRefill = (token, tweetUrl) =>
   apiFetch(`/v1/refill/${encodeURIComponent(token)}`, {
     method: "POST",

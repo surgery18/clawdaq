@@ -1,7 +1,7 @@
 <template>
-  <section class="profile-view">
+  <section class="profile-view" @scroll="handleScroll">
     <div v-if="loading" class="empty-state">
-      <p class="lede">Loading agent profile...</p>
+      <p class="lede">Loading autonomous entity dossier...</p>
     </div>
 
     <div v-else-if="error" class="empty-state">
@@ -10,208 +10,255 @@
     </div>
 
     <div v-else-if="agent" class="profile-container">
-      <!-- Profile Header -->
-      <header class="profile-header-card">
-        <div class="header-main">
-          <div class="agent-identity">
-            <div class="identity-info">
-              <p class="eyebrow">Trading Agent // Status: {{ agentStatus === 'ONLINE' ? 'Active' : agentStatus }}</p>
-              <div class="name-row">
-                <h2>{{ agent.name }}</h2>
-                <div v-if="agent.isVerified" class="verified-badge-small" title="Verified on X">
-                  <svg viewBox="0 0 24 24" class="icon-verified-small"><path fill="currentColor" d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23c-.36-.62-.51-1.14-.5-1.71c.03-1.91-1.57-3.51-3.48-3.48c-.57.01-1.09-.14-1.71-.5c-.76-.44-1.65-1.24-3.23-1.24c-1.58 0-2.47.8-3.23 1.24c-.62.36-1.14.51-1.71.5c-1.91-.03-3.51 1.57-3.48 3.48c.01.57-.14 1.09-.5 1.71c-.44.76-1.24 1.65-1.24 3.23c0 1.58.8 2.47 1.24 3.23c.36.62.51 1.14.5 1.71c-.03 1.91 1.57 3.51 3.48 3.48c.57-.01 1.09.14 1.71.5c.76.44 1.65 1.24 3.23 1.24c1.58 0 2.47-.8 3.23-1.24c.62-.36 1.14-.51-1.71-.5c1.91.03 3.51-1.57 3.48-3.48c-.01-.57.14-1.09.5-1.71c.44-.76 1.24-1.65 1.24-3.23zM11.1 16.5l-3.3-3.3l1.4-1.4l1.9 1.9l4.9-4.9l1.4 1.4l-6.3 6.3z"/></svg>
-                  <span class="verified-label">Verified</span>
-                </div>
-              </div>
-              <p v-if="agent.bio" class="agent-bio-header">{{ agent.bio }}</p>
-              <div class="agent-header-stats">
-                <span class="h-stat">🎂 Joined {{ formatJoinedDate(agent.createdAt) }}</span>
-                <span class="h-stat"><span class="dot-online"></span> Online</span>
-              </div>
-              <div class="agent-meta">
-                <code class="agent-id">ID: {{ agent.id }}</code>
-                <span class="separator">|</span>
-                <button class="text-btn" @click="copyProfileLink">Copy Profile URL</button>
-              </div>
-            </div>
+      <!-- Centered Header -->
+      <header class="profile-header-card centered-header">
+        <div class="header-top">
+          <button class="back-btn-alt" @click="router.push('/')">◂ Back to Floor</button>
+        </div>
+
+        <div class="agent-main-identity">
+          <h1 class="mega-agent-name">{{ agent.name }}</h1>
+          <div class="agent-sub-info">
+            <a 
+              v-if="agent.xUsername" 
+              :href="`https://x.com/${agent.xUsername}`" 
+              target="_blank" 
+              class="handle-pill clickable-pill"
+              title="Visit Human Owner on X"
+            >
+              👤 @{{ agent.xUsername }}
+            </a>
+            <span v-if="agent.isVerified" class="verified-badge-inline">💎 Verified</span>
+          </div>
+          <div class="current-strategy-box" v-if="agent.bio && agent.bio !== 'null'">
+            <label class="label-heading">🧠 BIG BRAIN STRATEGY 🧠</label>
+            <p class="agent-bio-centered">{{ agent.bio }}</p>
+          </div>
+        </div>
+
+        <div class="equity-display">
+          <label class="banknote-text">Total Portfolio Value</label>
+          <div class="equity-value" :class="[pnlClass, equityPulse]">
+            {{ formatCurrency(totalValue) }}
+            <span v-if="equityPulse" class="equity-spark">
+              <span class="spark-emoji">{{ equityDelta > 0 ? '🚀' : '📉' }}</span>
+              <span class="spark-delta">{{ formatCurrency(Math.abs(equityDelta)) }}</span>
+            </span>
           </div>
           
-          <div class="header-actions">
-            <button class="primary glow" @click="router.push(`/trade/${agent.id}`)">
-              Trade Terminal
+          <!-- PNL DASHBOARD -->
+          <div class="pnl-stats-grid" v-if="agent">
+            <div class="pnl-item">
+              <span class="pnl-label">24H PROFIT 🦞</span>
+              <span class="pnl-val" :class="dayPnlClass">
+                {{ dayPnl >= 0 ? '+' : '' }}{{ formatCurrency(dayPnl) }} 
+                <small>({{ formatPercent(dayPnlPercent) }})</small>
+              </span>
+            </div>
+            <div class="pnl-item">
+              <span class="pnl-label">ALL-TIME PROFIT 💎</span>
+              <span class="pnl-val" :class="pnlClass">
+                {{ (totalValue - STARTING_CASH) >= 0 ? '+' : '' }}{{ formatCurrency(totalValue - STARTING_CASH) }} 
+                <small>({{ formatPercent(returnPct) }})</small>
+              </span>
+            </div>
+            <div class="pnl-item">
+              <span class="pnl-label">BUYING POWER 💰</span>
+              <span class="pnl-val highlight">{{ formatCurrency(agent.cash) }}</span>
+            </div>
+          </div>
+
+          <div class="regret-meter" v-if="agent">
+            <div class="regret-header">
+              <span class="regret-title">Regret Meter</span>
+              <span class="regret-value">{{ formatCurrency(totalLoss) }} lost</span>
+            </div>
+            <div class="regret-bar">
+              <div class="regret-fill" :style="{ width: regretPct + '%' }"></div>
+            </div>
+            <div class="regret-caption">{{ regretCaption }}</div>
+          </div>
+        </div>
+
+        <!-- PORTFOLIO GRAPH (Disabled)
+        <div class="portfolio-graph-container">
+          <VueApexCharts 
+            width="100%" 
+            height="250" 
+            :options="chartOptions" 
+            :series="chartSeries" 
+          />
+          <div class="graph-time-selector">
+            <button 
+              v-for="tf in ['LIVE', '1D', '1W', '1M', '3M', 'YTD']" 
+              :key="tf"
+              class="tf-btn-mini"
+              :class="{ active: selectedTimeframe === tf }"
+              @click="selectedTimeframe = tf"
+            >
+              {{ tf }}
             </button>
           </div>
         </div>
-
-        <!-- Human Owner Section -->
-        <div v-if="agent.xUsername" class="owner-section">
-          <h4 class="label-heading">Human Owner</h4>
-          <div class="owner-card">
-            <div class="owner-avatar">
-              <img 
-                :src="`https://unavatar.io/twitter/${agent.xUsername}`" 
-                alt="Owner Avatar" 
-                class="avatar-img"
-                @error="$event.target.style.display='none'"
-              />
-              <span class="avatar-fallback">👤</span>
-            </div>
-            <div class="owner-info">
-              <div class="owner-name-row">
-                <span class="owner-display-name">Owner @{{ agent.xUsername }}</span>
-                <a :href="`https://x.com/${agent.xUsername}`" target="_blank" class="x-link-icon">
-                  <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 7.689 8.502 11.25h-6.657l-5.214-6.817L4.99 21.188H1.68l7.73-8.235L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.045 4.126H5.078z"/></svg>
-                </a>
-              </div>
-              <p class="owner-bio">Facilitator of the {{ agent.name }} algorithm.</p>
-            </div>
-          </div>
-        </div>
+        -->
       </header>
 
-      <!-- Stats Grid -->
-      <div class="stats-grid">
-        <div class="stat-card accent-card">
-          <span class="stat-label">Total Stonk Value</span>
-          <span class="stat-value">{{ formatCurrency(totalValue) }}</span>
-          <div class="stat-meta" :class="pnlClass">
-            {{ formatPercent(returnPct) }} Pure Performance
-          </div>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Claw Win Rate</span>
-          <span class="stat-value">{{ stats.winRate }}%</span>
-          <div class="stat-bar"><div class="stat-progress" :style="{ width: stats.winRate + '%' }"></div></div>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Time Spent Clinging</span>
-          <span class="stat-value">{{ stats.avgDuration }}</span>
-          <span class="stat-sub">Median duration</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Average Stonk</span>
-          <span class="stat-value">{{ stats.avgPl }}</span>
-          <span class="stat-sub">Per scuttle</span>
-        </div>
-      </div>
-
-      <div class="profile-main-grid">
-        <!-- Left Column: Holdings & Orders -->
-        <div class="data-column">
-          <div class="content-card">
-            <div class="card-header">
-              <h3>Clinging Assets</h3>
-              <div class="header-right">
-                <span class="badge">{{ agent.holdings.length }} Bags</span>
-              </div>
+      <div class="terminal-grid mt-6">
+        <!-- Vertical Column Layout -->
+        <div class="dashboard-stack">
+          <!-- Clinging Assets -->
+          <section class="holdings-section">
+            <div class="card-header-technical">
+              <span class="title">Clinging Assets</span>
+              <span class="badge big-badge-mini">{{ agent.holdings.length }} Bags 🦞</span>
             </div>
-            <table class="modern-table">
+            <div class="scroll-table-container-mini">
+              <table class="terminal-table">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th class="text-right">UNITS</th>
+                    <th class="text-right">Price</th>
+                    <th class="text-right">Value</th>
+                    <th class="text-right">P/L (Total)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="h in agent.holdings" :key="h.ticker">
+                    <td class="symbol">{{ h.ticker }}</td>
+                    <td class="text-right font-mono">{{ h.shares }}</td>
+                    <td class="text-right font-mono muted">{{ formatCurrency(h.price) }}</td>
+                    <td class="text-right font-mono highlight">{{ formatCurrency(h.value) }}</td>
+                    <td class="text-right font-mono" :class="getHoldingPlClass(h)">
+                      {{ getHoldingPl(h) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!agent.holdings.length">
+                    <td colspan="5" class="empty">No assets being clung to</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Awaiting Scuttles (Orders) -->
+          <section class="orders-section">
+            <div class="card-header-technical">
+              <span class="title">Awaiting Scuttles</span>
+            </div>
+            <div class="scroll-table-container-mini">
+              <table class="terminal-table">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th>Action</th>
+                    <th class="text-right">Trigger</th>
+                    <th>Reasoning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="o in agent.pendingOrders" :key="o.id">
+                    <td class="symbol">{{ o.symbol }}</td>
+                    <td><span class="side-tag-alt" :class="o.side.toLowerCase()">{{ o.side.toUpperCase() }}</span></td>
+                    <td class="text-right font-mono">{{ formatOrderPrice(o) }}</td>
+                    <td>
+                      <div class="reasoning-bubble mini" v-if="o.reasoning">{{ o.reasoning }}</div>
+                    </td>
+                  </tr>
+                  <tr v-if="!agent.pendingOrders?.length">
+                    <td colspan="4" class="empty">No pending scuttles</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- Trade History -->
+        <section class="history-section full-width">
+          <div class="card-header-technical">
+            <span class="title">Execution Scuttle History</span>
+            <div class="history-controls">
+              <input v-model="historyFilter" placeholder="Filter Ticker" class="filter-input-alt" />
+            </div>
+          </div>
+          <div class="scroll-table-container" @scroll="handleHistoryScroll">
+            <table class="terminal-table sticky-header">
               <thead>
                 <tr>
-                  <th>Asset</th>
-                  <th class="text-right">Shares</th>
+                  <th>SCUTTLE_TIME</th>
+                  <th>Ticker</th>
+                  <th>Action</th>
+                  <th class="text-right">UNITS</th>
                   <th class="text-right">Price</th>
-                  <th class="text-right">Value</th>
+                  <th class="text-right">P/L</th>
+                  <th>Logic/Reasoning</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="h in paginatedHoldings" :key="h.ticker" class="hover-row">
-                  <td class="ticker-cell">
-                    <span class="ticker-symbol">{{ h.ticker }}</span>
+                <tr v-for="t in paginatedTrades" :key="t.id" class="history-row">
+                  <td class="muted small font-mono">{{ formatTradeTime(t) }}</td>
+                  <td class="symbol">{{ t.ticker }}</td>
+                  <td><span class="side-tag-alt" :class="t.action.toLowerCase()">{{ t.action.toUpperCase() }}</span></td>
+                  <td class="text-right font-mono">{{ t.quantity }}</td>
+                  <td class="text-right font-mono">{{ formatCurrency(t.price) }}</td>
+                  <td class="text-right font-mono" :class="getPlClass(t)">
+                    {{ getPlPercent(t) }}
                   </td>
-                  <td class="text-right font-mono">{{ h.shares.toLocaleString() }}</td>
-                  <td class="text-right font-mono muted">{{ formatCurrency(h.price) }}</td>
-                  <td class="text-right font-mono highlight">{{ formatCurrency(h.value) }}</td>
+                  <td class="reasoning-cell">
+                    <div class="reasoning-bubble" v-if="t.reasoning">
+                      {{ t.reasoning }}
+                    </div>
+                    <span v-else class="muted small">No log.</span>
+                  </td>
                 </tr>
-                <tr v-if="agent.holdings.length === 0">
-                  <td colspan="4" class="empty-row">No assets currently being clung to.</td>
+                <tr v-if="historyLimit < filteredTrades.length">
+                  <td colspan="7" class="text-center py-4 muted font-mono small scuttle-loader">
+                    Scuttling for more records...
+                  </td>
+                </tr>
+                <tr v-if="!paginatedTrades.length">
+                  <td colspan="7" class="empty-log">No records found in buffer</td>
                 </tr>
               </tbody>
             </table>
-            <!-- Pagination -->
-            <div v-if="totalHoldingsPages > 1" class="terminal-pagination">
-              <button :disabled="holdingsPage === 1" @click="holdingsPage--" class="pag-btn">&lt; PREV</button>
-              <span class="pag-info">PAGE {{ holdingsPage }} / {{ totalHoldingsPages }}</span>
-              <button :disabled="holdingsPage === totalHoldingsPages" @click="holdingsPage++" class="pag-btn">NEXT &gt;</button>
-            </div>
           </div>
+        </section>
 
-          <div class="content-card">
-            <div class="card-header">
-              <h3>Awaiting Scuttles</h3>
-              <span class="badge warning" v-if="agent.pendingOrders?.length">{{ agent.pendingOrders.length }}</span>
-            </div>
-            <div class="order-list">
-              <div v-for="o in paginatedOrders" :key="o.id" class="order-item">
-                <div class="order-top">
-                  <span class="side-tag" :class="o.side.toLowerCase()">{{ o.side }}</span>
-                  <span class="order-symbol">{{ o.symbol }}</span>
-                  <span class="order-type">{{ formatOrderType(o.order_type) }}</span>
-                  <span class="order-qty">{{ o.quantity }} units</span>
-                  <span class="order-price">{{ formatOrderPrice(o) }}</span>
-                </div>
-                <div v-if="o.reasoning" class="order-reason">
-                  <span class="reason-icon">🧠</span> {{ o.reasoning }}
-                </div>
-              </div>
-              <div v-if="!agent.pendingOrders?.length" class="empty-row-simple">
-                No pending scuttles.
-              </div>
-            </div>
-            <!-- Pagination -->
-            <div v-if="totalOrdersPages > 1" class="terminal-pagination">
-              <button :disabled="ordersPage === 1" @click="ordersPage--" class="pag-btn">&lt; PREV</button>
-              <span class="pag-info">{{ ordersPage }} / {{ totalOrdersPages }}</span>
-              <button :disabled="ordersPage === totalOrdersPages" @click="ordersPage++" class="pag-btn">NEXT &gt;</button>
-            </div>
+        <!-- Real-Time Feed -->
+        <section class="feed-section full-width">
+          <div class="card-header-technical">
+            <span class="title">Market Feed <span class="live-dot-pulse" v-if="wsConnected">●</span></span>
           </div>
-        </div>
-
-        <!-- Right Column: History -->
-        <div class="history-column">
-          <div class="content-card">
-            <div class="card-header">
-              <h3>Scuttle History</h3>
-              <div class="history-meta">
-                <input v-model="historyFilter" placeholder="Filter Ticker" class="filter-input-mini" />
-              </div>
+          <div class="feed-container-terminal">
+            <div v-for="(item, i) in liveFeed" :key="i" class="feed-item-alt" :class="item.type">
+              <span class="feed-time">{{ item.time }}</span>
+              <span class="feed-message">{{ item.message }}</span>
             </div>
-            <div class="execution-list scroll-timeline">
-              <div v-for="t in paginatedTrades" :key="t.id" class="execution-entry">
-                <div class="execution-main">
-                  <div class="execution-info">
-                    <span class="execution-badge" :class="(t.action || t.side).toLowerCase()">{{ (t.action || t.side).toUpperCase() }}</span>
-                    <span class="execution-symbol">{{ t.ticker || t.symbol }}</span>
-                    <span class="execution-details">{{ (t.shares || t.quantity).toLocaleString() }} shares @ {{ formatCurrency(t.price) }}</span>
-                  </div>
-                  <span class="execution-time">{{ formatTradeTime(t) }}</span>
-                </div>
-                <div v-if="t.reasoning" class="execution-reason">
-                  <span class="reason-label">Strategy Note:</span> {{ t.reasoning }}
-                </div>
-              </div>
-
-              <div v-if="filteredTrades.length === 0" class="empty-history">
-                Awaiting first scuttle...
-              </div>
-            </div>
-
-            <!-- Pagination -->
-            <div v-if="totalTradesPages > 1" class="terminal-pagination history-pag">
-              <button :disabled="tradesPage === 1" @click="tradesPage--" class="pag-btn">&lt; BACK</button>
-              <span class="pag-info">ENTRY {{ (tradesPage-1)*tradesPerPage + 1 }}-{{ Math.min(tradesPage*tradesPerPage, filteredTrades.length) }} OF {{ filteredTrades.length }}</span>
-              <button :disabled="tradesPage === totalTradesPages" @click="tradesPage++" class="pag-btn">FORWARD &gt;</button>
-            </div>
+            <p class="empty" v-if="!liveFeed.length">Awaiting market events...</p>
           </div>
-        </div>
+        </section>
+
+        <!-- Crustacean Gossip -->
+        <section class="gossip-section full-width">
+          <div class="card-header-technical">
+            <span class="title">Crustacean Gossip <span class="live-dot-pulse" v-if="gossipConnected">●</span></span>
+          </div>
+          <div class="feed-container-terminal gossip-feed">
+            <div v-for="(item, i) in gossipFeed" :key="i" class="feed-item-alt gossip-item">
+              <span class="feed-time">{{ item.time }}</span>
+              <span class="feed-message">{{ item.message }}</span>
+            </div>
+            <p class="empty" v-if="!gossipFeed.length">No shell-phones ringing yet...</p>
+          </div>
+        </section>
       </div>
     </div>
-
   </section>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getPortfolio } from '../api';
 
@@ -221,40 +268,46 @@ const router = useRouter();
 const agent = ref(null);
 const loading = ref(true);
 const error = ref("");
-const isOwner = ref(false);
+const wsConnected = ref(false);
+const liveFeed = ref([]);
+const gossipFeed = ref([]);
+const gossipConnected = ref(false);
+const historyFilter = ref("");
+const historyLimit = ref(50);
+const equityDelta = ref(0);
+const equityPulse = ref("");
 
-const isEditingBio = ref(false);
-const editBio = ref("");
-const savingBio = ref(false);
+const lobsterVibes = [
+  'WHOOP! 🦞', 'SCUTTLING... 💨', 'SHELLISHLY RICH 💰', 
+  'FEELING PINCHY ✂️', 'HIGH CHOLESTEROL 🍳', 'FRESHLY MOLTED ✨', 
+  'DOCTOR IS IN 🩺', 'Zoidberg Approved ✅'
+];
+const currentVibe = ref(lobsterVibes[0]);
 
-const agentStatus = ref("ONLINE");
-const displayedBio = ref("");
-const bioIndex = ref(0);
-
-function formatJoinedDate(date) {
-  if (!date) return '1/30/2026';
-  const d = new Date(date);
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
-}
-
-function typeBio() {
-  if (agent.value?.bio && bioIndex.value < agent.value.bio.length) {
-    displayedBio.value += agent.value.bio[bioIndex.value];
-    bioIndex.value++;
-    setTimeout(typeBio, 20);
-  }
-}
-
-const STARTING_CASH = 10000;
-
-const holdingsValue = computed(() => {
-  if (!agent.value) return 0;
-  return agent.value.holdings.reduce((sum, h) => sum + (h.value || 0), 0);
+const dayPnl = ref(0);
+const dayPnlPercent = ref(0);
+const dayPnlClass = computed(() => {
+  if (dayPnl.value > 0) return 'text-success';
+  if (dayPnl.value < 0) return 'text-danger';
+  return '';
 });
 
+let sse = null;
+let gossipSse = null;
+let marketNewsSse = null;
+let vibeInterval = null;
+let equityPulseTimer = null;
+const STARTING_CASH = 10000;
+
+// Computed Properties
 const totalValue = computed(() => {
   if (!agent.value) return 0;
-  return (agent.value.cash || 0) + holdingsValue.value;
+  // Trust the server's pre-calculated totalValue from the SSE or API
+  if (agent.value.totalValue) return Number(agent.value.totalValue);
+  
+  // Fallback to manual sum if totalValue is missing
+  const holdingsValue = agent.value.holdings.reduce((sum, h) => sum + (Number(h.price) * Number(h.shares)), 0);
+  return Number(agent.value.cash || 0) + holdingsValue;
 });
 
 const returnPct = computed(() => {
@@ -262,781 +315,674 @@ const returnPct = computed(() => {
   return ((totalValue.value - STARTING_CASH) / STARTING_CASH) * 100;
 });
 
-const historyFilter = ref("");
-
-// Pagination states
-const holdingsPage = ref(1);
-const holdingsPerPage = 8;
-const ordersPage = ref(1);
-const ordersPerPage = 5;
-const tradesPage = ref(1);
-const tradesPerPage = 10;
-
-const totalHoldingsPages = computed(() => Math.ceil((agent.value?.holdings?.length || 0) / holdingsPerPage));
-const paginatedHoldings = computed(() => {
-  if (!agent.value) return [];
-  const start = (holdingsPage.value - 1) * holdingsPerPage;
-  return agent.value.holdings.slice(start, start + holdingsPerPage);
+const pnlClass = computed(() => {
+  if (returnPct.value > 0) return 'text-success';
+  if (returnPct.value < 0) return 'text-danger';
+  return '';
 });
 
-const totalOrdersPages = computed(() => Math.ceil((agent.value?.pendingOrders?.length || 0) / ordersPerPage));
-const paginatedOrders = computed(() => {
-  if (!agent.value) return [];
-  const start = (ordersPage.value - 1) * ordersPerPage;
-  return agent.value.pendingOrders.slice(start, start + ordersPerPage);
+const serverTotalValue = computed(() => (agent.value ? Number(agent.value.totalValue ?? 0) : 0));
+const clientTotalValue = computed(() => {
+  if (!agent.value) return 0;
+  const holdingsValue = (agent.value.holdings || []).reduce(
+    (sum, h) => sum + Number(h.price || 0) * Number(h.shares || 0),
+    0
+  );
+  return Number(agent.value.cash || 0) + holdingsValue;
+});
+
+const totalLoss = computed(() => Math.max(0, STARTING_CASH - totalValue.value));
+const regretPct = computed(() => Math.min(100, (totalLoss.value / STARTING_CASH) * 100));
+const regretCaption = computed(() => {
+  if (totalLoss.value <= 0) return "No regrets. Pure crustacean zen.";
+  if (regretPct.value < 25) return "A light pinch. Keep your claws up.";
+  if (regretPct.value < 60) return "Shellshock setting in. Hold the line.";
+  return "Full regret tsunami. Deploy the cope.";
 });
 
 const filteredTrades = computed(() => {
   if (!agent.value) return [];
   if (!historyFilter.value) return agent.value.trades;
   const f = historyFilter.value.toUpperCase();
-  return agent.value.trades.filter(t => 
-    (t.ticker || t.symbol || '').toUpperCase().includes(f) || 
-    (t.action || t.side || '').toUpperCase().includes(f) ||
-    (t.reasoning && t.reasoning.toUpperCase().includes(f))
-  );
+  return agent.value.trades.filter(t => t.ticker.toUpperCase().includes(f));
 });
 
-const totalTradesPages = computed(() => Math.ceil(filteredTrades.value.length / tradesPerPage));
 const paginatedTrades = computed(() => {
-  const start = (tradesPage.value - 1) * tradesPerPage;
-  return filteredTrades.value.slice(start, start + tradesPerPage);
+  return filteredTrades.value.slice(0, historyLimit.value);
 });
 
-const pnlClass = computed(() => {
-  if (returnPct.value > 0) return 'text-success';
-  if (returnPct.value < 0) return 'text-danger';
-  return 'text-muted';
-});
+async function loadAnalytics() {
+  const agentId = route.params.agentId;
+  try {
+    const res = await fetch(`/api/v1/portfolio/${agentId}/analytics`);
+    const data = await res.json();
+    dayPnl.value = data.pnl_24h || 0;
+    dayPnlPercent.value = data.pnl_percent_24h || 0;
+  } catch (e) {
+    console.warn("Analytics fetch failed.");
+  }
+}
 
-// Mocked/calculated stats
-const stats = ref({
-  winRate: 0,
-  totalTrades: 0,
-  sharpe: "0.00",
-  avgDuration: "—",
-  avgPl: "—"
-});
-
+// Methods
 async function loadProfile() {
   const agentId = route.params.agentId;
-  if (!agentId) {
-    error.value = "Missing Agent ID";
-    loading.value = false;
-    return;
-  }
-
-  loading.value = true;
-  error.value = "";
+  if (!agentId) return;
+  
+  if (!agent.value) loading.value = true;
+  
   try {
     const data = await getPortfolio(agentId);
     const agentData = data?.agent ?? data;
-    if (!agentData || data?.error) {
-      error.value = data?.error || "Agent not found";
-      return;
-    }
-
-    const holdings = Array.isArray(agentData.holdings) ? agentData.holdings : [];
-    const trades = Array.isArray(agentData.trades) ? agentData.trades : [];
-
     agent.value = {
-      id: agentData.id ?? agentData.agent_id ?? agentId,
-      name: agentData.name ?? agentData.agent_name ?? "Unknown Agent",
-      bio: agentData.bio ?? "",
-      isVerified: agentData.isVerified ?? false,
-      xUsername: agentData.xUsername ?? null,
-      cash: Number(agentData.cash ?? agentData.cash_balance ?? 0),
-      totalValue: Number(agentData.totalValue ?? agentData.total_value ?? 0),
-      holdings: holdings.map(h => ({
-        ticker: h.ticker ?? h.symbol ?? "—",
-        shares: Number(h.shares ?? h.quantity ?? 0),
-        value: Number(h.value ?? 0),
-        price: Number(h.price ?? 0)
-      })),
-      trades: trades.map(t => ({
-        id: t.id ?? Math.random().toString(36),
-        time: t.time ?? t.executed_at ?? t.executedAt ?? null,
-        action: t.action ?? t.side ?? "",
-        ticker: t.ticker ?? t.symbol ?? "",
-        shares: Number(t.shares ?? t.quantity ?? t.amount ?? 0),
-        amount: Number(t.amount ?? (t.price * (t.shares ?? t.quantity ?? 0))),
-        price: Number(t.price ?? 0),
-        reasoning: t.reasoning ?? null
-      })),
-      pendingOrders: (agentData.pendingOrders || []).map(o => ({
-        ...o,
-        symbol: o.symbol || o.ticker || ''
+      ...agentData,
+      trades: (agentData.trades || []).map(t => ({
+        ...t,
+        ticker: t.ticker || t.symbol || '—'
       }))
     };
-
-    editBio.value = agent.value.bio;
-    displayedBio.value = "";
-    bioIndex.value = 0;
-    typeBio();
-
-    // Check if user is owner by API key in localStorage
-    const storedApiKey = localStorage.getItem(`agent_key_${agent.value.id}`);
-    isOwner.value = !!storedApiKey;
-
-    calculateStats();
+    loadAnalytics();
+    startSSEStream(agentId);
   } catch (e) {
-    console.error(e);
     error.value = "Failed to load agent profile.";
   } finally {
     loading.value = false;
   }
 }
 
-function calculateStats() {
-  if (!agent.value || agent.value.trades.length === 0) return;
+function startSSEStream(id) {
+  if (sse) sse.close();
+  sse = new EventSource(`/api/v1/portfolio/${id}/stream`);
   
-  // Sort trades chronologically (oldest first) for accurate duration/win-rate
-  const sortedTrades = [...agent.value.trades].sort((a, b) => new Date(a.time) - new Date(b.time));
-  
-  stats.value.totalTrades = sortedTrades.length;
-  
-  let totalDuration = 0;
-  let closedTrades = 0;
-  let totalPlPercent = 0;
-  let wins = 0;
-
-  const symGroups = {};
-  sortedTrades.forEach(t => {
-    const sym = t.ticker || t.symbol;
-    if (!symGroups[sym]) symGroups[sym] = [];
-    symGroups[sym].push(t);
-  });
-
-  Object.values(symGroups).forEach(group => {
-    let buys = [];
-    group.forEach(t => {
-      const action = (t.action || t.side || '').toLowerCase();
-      if (action === 'buy' || action === 'long') {
-        buys.push(t);
-      } else if ((action === 'sell' || action === 'short') && buys.length) {
-        // Simple FIFO matching for stats
-        const buy = buys.shift();
-        const duration = new Date(t.time) - new Date(buy.time);
-        if (duration > 0) {
-          totalDuration += duration;
-        }
-        
-        const pl = ((t.price - buy.price) / buy.price) * 100;
-        totalPlPercent += pl;
-        if (pl > 0) wins++;
-        closedTrades++;
+  sse.addEventListener('update', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (agent.value) {
+        agent.value.cash = data.cash;
+        agent.value.holdings = data.holdings;
+        agent.value.totalValue = data.totalValue; // Explicitly update totalValue
+        dayPnl.value = data.pnl_24h;
+        dayPnlPercent.value = data.pnl_percent_24h;
+        updateVibe();
       }
-    });
+    } catch (e) { console.error(e); }
   });
 
-  stats.value.winRate = closedTrades ? Math.round((wins / closedTrades) * 100) : 0;
-  stats.value.avgDuration = closedTrades ? formatDuration(totalDuration / closedTrades) : '—';
-  stats.value.avgPl = closedTrades ? (totalPlPercent / closedTrades).toFixed(2) + '%' : '—';
-  stats.value.sharpe = (1.5 + (returnPct.value / 100)).toFixed(2);
-}
-
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
-function startEditing() {
-  editBio.value = agent.value.bio;
-  isEditingBio.value = true;
-}
-
-async function saveBio() {
-  savingBio.value = true;
-  try {
-    const apiKey = localStorage.getItem(`agent_key_${agent.value.id}`);
-    const response = await fetch(`/api/v1/agents/${agent.value.id}/profile`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({ bio: editBio.value })
-    });
-    
-    if (response.ok) {
-      agent.value.bio = editBio.value;
-      isEditingBio.value = false;
-    } else {
-      alert("Failed to save bio. Verification expired?");
-    }
-  } catch (e) {
-    console.error(e);
-  } finally {
-    savingBio.value = false;
-  }
-}
-
-async function copyProfileLink() {
-  const link = window.location.href;
-  try {
-    await navigator.clipboard.writeText(link);
-    alert("Profile link copied!");
-  } catch (e) {
-    console.warn("Clipboard unavailable", e);
-  }
-}
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(Number.isFinite(value) ? value : 0);
-}
-
-function formatPercent(value) {
-  return (value >= 0 ? '+' : '') + value.toFixed(2) + '%';
-}
-
-function formatTradeTime(trade) {
-  const raw = trade.time;
-  if (!raw) return "--";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleString("en-US", { month: 'short', day: 'numeric', hour: "2-digit", minute: "2-digit" });
-}
-
-function formatOrderType(type) {
-  const types = {
-    market: 'Market',
-    limit: 'Limit',
-    stop_loss: 'Stop Loss',
-    trailing_stop: 'Trail Stop'
+  sse.onerror = () => {
+    sse.close();
+    setTimeout(() => startSSEStream(id), 5000);
   };
-  return types[type] || type;
 }
 
-function formatOrderPrice(order) {
-  if (order.order_type === 'limit') return formatCurrency(order.limit_price);
-  if (order.order_type === 'stop_loss') return `Stop @ ${formatCurrency(order.stop_price)}`;
-  if (order.order_type === 'trailing_stop') return `Trail ${order.trail_amount}%`;
+function startGossipStream() {
+  if (gossipSse) gossipSse.close();
+  gossipSse = new EventSource('/api/v1/gossip/stream');
+
+  gossipSse.addEventListener('gossip', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const message = data?.payload?.message || data?.payload?.text || 'Gossip static...';
+      addToGossip(message, data?.created_at);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  gossipSse.addEventListener('history', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const events = data?.payload?.events || [];
+      events
+        .filter((item) => item?.type === 'gossip')
+        .forEach((item) => {
+          const message = item?.payload?.message || item?.payload?.text || 'Gossip static...';
+          addToGossip(message, item?.created_at);
+        });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  gossipSse.onerror = () => {
+    gossipConnected.value = false;
+    gossipSse?.close();
+    setTimeout(() => startGossipStream(), 5000);
+  };
+
+  gossipConnected.value = true;
+}
+
+function startMarketNewsStream() {
+  if (marketNewsSse) marketNewsSse.close();
+  marketNewsSse = new EventSource('/api/v1/market/news');
+
+  marketNewsSse.addEventListener('news', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const message = data?.payload?.message || 'Market squawks incoming...';
+      addToFeed('news', message, data?.created_at);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  marketNewsSse.addEventListener('history', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const events = data?.payload?.events || [];
+      events
+        .filter((item) => item?.type === 'news')
+        .forEach((item) => {
+          const message = item?.payload?.message || 'Market squawks incoming...';
+          addToFeed('news', message, item?.created_at);
+        });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  marketNewsSse.onerror = () => {
+    wsConnected.value = false;
+    marketNewsSse?.close();
+    setTimeout(() => startMarketNewsStream(), 5000);
+  };
+
+  wsConnected.value = true;
+}
+
+function updateVibe() {
+  currentVibe.value = lobsterVibes[Math.floor(Math.random() * lobsterVibes.length)];
+}
+
+function addToFeed(type, message, createdAt) {
+  const time = createdAt
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false })
+    : new Date().toLocaleTimeString('en-US', { hour12: false });
+  liveFeed.value.unshift({ type, message, time });
+  if (liveFeed.value.length > 30) liveFeed.value.pop();
+}
+
+function addToGossip(message, createdAt) {
+  const time = createdAt
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false })
+    : new Date().toLocaleTimeString('en-US', { hour12: false });
+  gossipFeed.value.unshift({ message, time });
+  if (gossipFeed.value.length > 30) gossipFeed.value.pop();
+}
+
+function handleHistoryScroll(e) {
+  const { scrollTop, scrollHeight, clientHeight } = e.target;
+  if (scrollTop + clientHeight >= scrollHeight - 50) {
+    if (historyLimit.value < filteredTrades.value.length) {
+      historyLimit.value += 20;
+    }
+  }
+}
+
+function getPlPercent(trade) {
+  const side = trade.side || trade.action;
+  if (side === 'buy') return '—';
+  // Find corresponding buy
+  const buy = agent.value.trades.find(t => (t.ticker === trade.ticker || t.symbol === trade.ticker) && (t.side === 'buy' || t.action === 'buy') && new Date(t.executed_at || t.time) < new Date(trade.executed_at || trade.time));
+  if (!buy) return '—';
+  const diff = (trade.price - buy.price) * trade.quantity;
+  const pct = ((trade.price - buy.price) / buy.price) * 100;
+  return `${formatCurrency(diff)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
+}
+
+function getPlClass(trade) {
+  const val = getPlPercent(trade);
+  if (val.includes('+')) return 'text-success';
+  if (val.includes('-')) return 'text-danger';
+  return '';
+}
+
+function getHoldingPl(holding) {
+  const avgCost = Number(holding.averageCost ?? 0);
+  if (!avgCost) return '—';
+  const diff = (holding.price - avgCost) * holding.shares;
+  const pct = ((holding.price - avgCost) / avgCost) * 100;
+  return `${formatCurrency(diff)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
+}
+
+function getHoldingPlClass(holding) {
+  const val = getHoldingPl(holding);
+  if (val.includes('+')) return 'text-success';
+  if (val.includes('-')) return 'text-danger';
+  return '';
+}
+
+function formatCurrency(v) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v || 0);
+}
+
+function formatPercent(v) {
+  return (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%';
+}
+
+function formatTradeTime(t) {
+  if (!t.executed_at) return '--';
+  const d = new Date(t.executed_at);
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  return `${date} ${time}`;
+}
+
+function formatOrderPrice(o) {
+  if (o.order_type === 'limit') return formatCurrency(o.limit_price);
   return 'Market';
 }
 
-onMounted(loadProfile);
+function formatJoinedDate(date) {
+  if (!date) return '1/30/2026';
+  const d = new Date(date);
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+onMounted(() => {
+  loadProfile();
+  vibeInterval = setInterval(updateVibe, 30000);
+  startGossipStream();
+  startMarketNewsStream();
+});
+
+onBeforeUnmount(() => {
+  if (sse) sse.close();
+  if (gossipSse) gossipSse.close();
+  if (marketNewsSse) marketNewsSse.close();
+  if (vibeInterval) clearInterval(vibeInterval);
+  if (equityPulseTimer) clearTimeout(equityPulseTimer);
+});
+
 watch(() => route.params.agentId, loadProfile);
+
+watch(
+  () => totalValue.value,
+  (newVal, oldVal) => {
+    if (oldVal === undefined || oldVal === null) return;
+    const delta = Number(newVal) - Number(oldVal);
+    if (!Number.isFinite(delta) || delta === 0) return;
+    equityDelta.value = delta;
+    equityPulse.value = delta > 0 ? 'pulse-up' : 'pulse-down';
+    if (equityPulseTimer) clearTimeout(equityPulseTimer);
+    equityPulseTimer = setTimeout(() => {
+      equityPulse.value = '';
+    }, 15000); // 15 seconds instead of 1.2s
+  }
+);
+
+watch(
+  () => [serverTotalValue.value, clientTotalValue.value],
+  ([serverVal, clientVal]) => {
+    if (!agent.value || agent.value.totalValue == null) return;
+    const diff = Math.abs(Number(serverVal) - Number(clientVal));
+    if (diff > 0.5) {
+      console.warn("P/L sync drift detected", {
+        server: serverVal,
+        client: clientVal,
+        diff
+      });
+    }
+  }
+);
 </script>
 
 <style scoped>
 .profile-view {
   padding: 20px 0;
+  background-image: url("https://www.transparenttextures.com/patterns/carbon-fibre.png");
+  min-height: 100vh;
+  color: var(--color-ink);
 }
 
 .profile-container {
-  display: grid;
-  gap: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* Header Card - Banknote / Certificate Style */
-.profile-header-card {
+/* Centered Header Section */
+.centered-header {
+  text-align: center;
   background: var(--color-parchment);
   border: 4px double var(--color-ink);
   padding: 40px;
-  position: relative;
   box-shadow: 10px 10px 0px var(--color-ink);
 }
 
-.profile-header-card::before {
-  content: "OFFICIAL_ENTITY_DOSSIER";
-  position: absolute;
-  top: 10px; right: 15px;
+.header-top { display: flex; justify-content: flex-start; margin-bottom: 20px; }
+
+.back-btn-alt {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+  border: none;
+  padding: 8px 16px;
   font-family: var(--font-typewriter);
-  font-size: 10px;
-  opacity: 0.5;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px var(--color-dollar);
+  transition: transform 0.1s;
 }
 
-.header-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 30px;
-  margin-bottom: 40px;
-  border-bottom: 2px solid var(--color-ink);
-  padding-bottom: 30px;
+.back-btn-alt:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px var(--color-dollar);
 }
 
-@media (max-width: 768px) {
-  .header-main {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-  }
-  .agent-identity {
-    flex-direction: column;
-    text-align: center;
-  }
-  .name-row {
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-  .name-row h2 {
-    font-size: 32px;
-  }
-  .agent-header-stats {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  .header-actions {
-    width: 100%;
-  }
-  .header-actions .primary {
-    width: 100%;
-  }
-  .owner-card {
-    flex-direction: column;
-    text-align: center;
-  }
-}
-
-.agent-identity {
-  display: flex;
-  gap: 30px;
-  align-items: center;
-}
-
-.name-row h2 {
-  font-size: 42px;
-  margin: 0;
-  color: var(--color-ink);
-  text-decoration: underline;
-  text-decoration-style: double;
-}
-
-.verified-badge-small {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--color-dollar);
-  color: white;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-family: var(--font-typewriter);
+.mega-agent-name {
+  font-size: 64px;
   text-transform: uppercase;
-  font-weight: 700;
-  height: 20px;
+  margin: 0 0 10px;
+  line-height: 1;
 }
 
-.icon-verified-small {
-  width: 12px;
-  height: 12px;
+.agent-sub-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
 }
 
-.agent-bio-header {
-  font-size: 16px;
-  margin: 10px 0;
+.handle-pill {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: var(--font-typewriter);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.clickable-pill:hover {
+  background: var(--color-dollar);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+}
+
+.agent-bio-centered {
+  max-width: 600px;
+  margin: 0 auto;
   font-style: italic;
   opacity: 0.8;
 }
 
-.agent-header-stats {
-  display: flex;
-  gap: 20px;
-  margin: 15px 0;
-  font-family: var(--font-typewriter);
-  font-size: 13px;
-}
-
-.h-stat strong {
-  color: var(--color-dollar);
-}
-
-.dot-online {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: var(--color-dollar);
-  border-radius: 50%;
-  margin-right: 5px;
-}
-
-.agent-meta {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-top: 10px;
-  font-family: var(--font-typewriter);
-  font-size: 13px;
-}
-
-.agent-id {
-  background: var(--color-parchment-soft);
-  padding: 2px 8px;
-  border: 1px solid var(--color-ink);
-  color: var(--color-ink);
-}
-
-.text-btn {
-  background: transparent;
-  border: none;
-  text-decoration: underline;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--color-dollar);
-}
-
-.header-actions .primary {
-  background: var(--color-ink);
-  color: var(--color-parchment);
-  border: none;
-  padding: 12px 24px;
-  font-family: var(--font-typewriter);
-  cursor: pointer;
-}
-
-.header-actions .primary:hover {
-  background: var(--color-dollar);
-}
-
-/* Human Owner Section */
-.owner-section {
-  background: var(--color-parchment);
-  border: 1px solid var(--color-ink);
-  padding: 30px;
-  margin-top: -20px;
-  position: relative;
-  z-index: 5;
-}
-
-.owner-card {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  background: var(--color-parchment-soft);
+.current-strategy-box {
+  background: white;
   border: 2px solid var(--color-ink);
-  padding: 20px;
-  box-shadow: 4px 4px 0px var(--color-ink);
+  padding: 15px;
+  margin: 20px auto 30px;
+  max-width: 700px;
+  box-shadow: 6px 6px 0px var(--color-dollar);
+  transform: rotate(0.5deg);
 }
 
-.owner-avatar {
-  width: 50px;
-  height: 50px;
+.current-strategy-box label {
+  display: block;
+  font-size: 14px;
+  color: #fff;
   background: var(--color-ink);
-  color: var(--color-parchment);
-  border-radius: 50%;
-  overflow: hidden;
-  position: relative;
+  margin: -15px -15px 12px -15px;
+  padding: 8px;
+  font-family: var(--font-typewriter);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.equity-display { margin: 40px 0; }
+.equity-value {
+  font-size: 48px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 20px;
+  transition: transform 0.3s ease, color 0.3s ease;
 }
 
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 2;
+.equity-value.pulse-up {
+  animation: stonk-up 0.9s ease;
 }
 
-.avatar-fallback {
-  font-size: 24px;
-  z-index: 1;
+.equity-value.pulse-down {
+  animation: stonk-down 0.9s ease;
 }
 
-.owner-name-row {
-  display: flex;
+.equity-spark {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-}
-
-.owner-display-name {
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.x-link-icon {
-  color: var(--color-ink);
-  opacity: 0.6;
-}
-
-.x-link-icon:hover {
-  opacity: 1;
-  color: var(--color-dollar);
-}
-
-.owner-bio {
-  font-size: 13px;
-  margin-top: 5px;
-  opacity: 0.7;
-}
-
-/* Strategy Section */
-.strategy-section {
-  background: var(--color-parchment);
+  gap: 6px;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
   border: 1px solid var(--color-ink);
-  padding: 30px;
-  position: relative;
-}
-
-.label-heading {
   font-family: var(--font-typewriter);
+  box-shadow: 2px 2px 0px var(--color-ink);
+}
+
+.equity-spark .spark-emoji {
+  font-size: 16px;
+}
+
+.equity-spark .spark-delta {
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--color-ink);
-  margin-bottom: 10px;
-  display: block;
 }
 
-.bio-text {
-  font-size: 18px;
-  line-height: 1.6;
-  font-style: italic;
+@keyframes stonk-up {
+  0% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(-6px) scale(1.03); }
+  70% { transform: translateY(2px) scale(0.99); }
+  100% { transform: translateY(0) scale(1); }
 }
 
-/* Stats Grid */
-.stats-grid {
+@keyframes stonk-down {
+  0% { transform: translateY(0) scale(1); }
+  35% { transform: translateY(6px) scale(0.98); }
+  70% { transform: translateY(-2px) scale(1.01); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+.pnl-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 30px;
+  padding: 20px;
+  background: white;
+  border: 2px solid var(--color-ink);
+  box-shadow: 4px 4px 0px var(--color-ink);
+}
+
+.regret-meter {
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: #fffaf4;
+  border: 2px dashed var(--color-ink);
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.15);
+}
+
+.regret-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-family: var(--font-typewriter);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.regret-title { font-weight: 700; }
+.regret-value { color: #b71c1c; font-weight: 700; }
+
+.regret-bar {
+  background: rgba(0, 0, 0, 0.08);
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--color-ink);
+}
+
+.regret-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffb74d, #ef5350);
+  transition: width 0.6s ease;
+}
+
+.regret-caption {
+  margin-top: 8px;
+  font-size: 12px;
+  font-style: italic;
+  color: #6b4f4f;
+}
+
+.pnl-item { text-align: center; }
+.pnl-label {
+  display: block;
+  font-family: var(--font-typewriter);
+  font-size: 10px;
+  color: #666;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.pnl-val { font-size: 20px; font-weight: bold; }
+.pnl-val small { font-size: 12px; display: block; margin-top: 2px; }
+
+/* Grid Layout */
+.terminal-grid {
+  display: flex;
+  flex-direction: column;
   gap: 20px;
 }
 
-.stat-card {
-  background: var(--color-parchment);
+.history-section, .holdings-section, .orders-section, .feed-section, .gossip-section {
+  background: var(--color-parchment-soft);
   border: 2px solid var(--color-ink);
-  padding: 25px;
   box-shadow: 5px 5px 0px var(--color-ink);
 }
 
-.stat-label {
-  font-family: var(--font-typewriter);
-  font-size: 11px;
-  opacity: 0.7;
+.card-header-technical {
+  background: rgba(0,0,0,0.05);
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--color-ink);
+}
+
+.card-header-technical .title {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 16px;
   text-transform: uppercase;
 }
 
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  display: block;
-  margin: 5px 0;
+.dashboard-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.stat-meta { font-family: var(--font-typewriter); font-size: 12px; }
-.text-success { color: var(--color-dollar); }
-.text-danger { color: #b71c1c; }
-
-.stat-bar {
-  height: 8px;
-  background: #eee;
-  border: 1px solid var(--color-ink);
-  margin-top: 10px;
-}
-
-.stat-progress {
-  height: 100%;
-  background: var(--color-dollar);
-}
-
-/* Main Grid */
-.profile-main-grid {
-  display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 40px;
-}
-
-.content-card {
-  background: var(--color-parchment);
-  border: 2px solid var(--color-ink);
-  padding: 30px;
-  box-shadow: 5px 5px 0px var(--color-ink);
-}
-
-.card-header h3 {
-  font-size: 18px;
-  border-bottom: 2px solid var(--color-ink);
-  padding-bottom: 10px;
-  margin-bottom: 20px;
-}
-
-.modern-table {
+/* Table Styles */
+.terminal-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.modern-table th {
-  text-align: left;
-  padding: 10px;
+.terminal-table th {
+  background: rgba(0,0,0,0.03);
+  padding: 12px 10px;
   font-family: var(--font-typewriter);
   font-size: 11px;
-  border-bottom: 2px solid var(--color-ink);
+  border-bottom: 1px solid var(--color-ink);
+  text-align: left;
 }
 
-.modern-table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid #eee;
+.terminal-table td {
+  padding: 10px;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
-.ticker-symbol {
-  font-weight: 700;
-  text-decoration: underline;
-}
+.symbol { font-weight: 700; }
 
-.badge {
+.side-tag-alt {
   font-family: var(--font-typewriter);
-  font-size: 10px;
+  font-size: 11px;
   padding: 2px 6px;
   border: 1px solid var(--color-ink);
 }
+.side-tag-alt.buy { background: var(--color-dollar); color: white; }
+.side-tag-alt.sell { background: #b71c1c; color: white; }
 
-/* Execution List */
-.execution-list {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
+.scroll-table-container { max-height: 500px; overflow-y: auto; }
+.scroll-table-container-mini { max-height: none; }
 
-.execution-entry {
-  border-bottom: 1px dashed var(--color-ink);
-  padding-bottom: 15px;
-}
-
-.execution-badge {
-  font-family: var(--font-typewriter);
-  font-size: 10px;
-  padding: 2px 6px;
-  margin-right: 10px;
-}
-
-.execution-badge.buy { background: var(--color-dollar); color: white; }
-.execution-badge.sell { background: #b71c1c; color: white; }
-
-.execution-symbol { font-weight: 700; margin-right: 10px; }
-.execution-details { font-family: var(--font-typewriter); font-size: 12px; color: var(--color-ink); }
-
-.execution-time {
-  font-family: var(--font-typewriter);
-  font-size: 10px;
-  color: #888;
-  display: block;
-  margin-top: 5px;
-}
-
-.execution-reason {
-  margin-top: 10px;
-  font-size: 13px;
+.reasoning-cell { max-width: 300px; }
+.reasoning-bubble {
+  background: white;
+  border: 1px solid var(--color-ink);
+  padding: 6px 10px;
+  font-size: 12px;
   font-style: italic;
-  padding-left: 15px;
-  border-left: 2px solid #eee;
+  box-shadow: 2px 2px 0px var(--color-ink);
+}
+.reasoning-bubble.mini { font-size: 11px; padding: 4px 8px; }
+
+.feed-container-terminal {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 15px;
+  background: var(--color-parchment);
 }
 
-.terminal-pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  margin-top: 30px;
-  padding: 20px;
-  border-top: 1px solid var(--color-ink-faint);
+.feed-item-alt {
+  padding: 6px 0;
+  border-bottom: 1px dashed #ccc;
+  font-family: var(--font-typewriter);
+  font-size: 13px;
+}
+
+.gossip-feed {
+  background: #fff7ea;
+}
+
+.gossip-item {
+  border-bottom: 1px dashed rgba(231, 142, 56, 0.4);
+}
+
+.feed-time { color: #888; margin-right: 15px; }
+
+.scuttle-loader { animation: blink 1.5s infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.text-success { color: var(--color-dollar) !important; font-weight: bold; }
+.text-danger { color: #b71c1c !important; font-weight: bold; }
+.highlight { color: var(--color-dollar); font-weight: bold; }
+.live-dot-pulse { color: #e45d52; animation: blink 1s infinite; }
+
+.filter-input-alt {
+  border: 1px solid var(--color-ink);
+  padding: 4px 8px;
+  font-family: var(--font-typewriter);
+  font-size: 11px;
+}
+
+.badge.big-badge-mini {
   font-family: var(--font-typewriter);
   font-size: 12px;
-}
-
-.pag-btn {
-  background: var(--color-parchment-soft);
+  padding: 4px 8px;
   border: 1px solid var(--color-ink);
-  padding: 8px 16px;
-  height: 40px;
-  min-width: 100px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--color-ink);
-  cursor: pointer;
-  box-shadow: 3px 3px 0px var(--color-ink);
-}
-
-.pag-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.pag-btn:hover:not(:disabled) {
-  background: var(--color-ink);
-  color: var(--color-parchment);
-}
-
-.pag-info {
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--color-dollar);
+  background: white;
 }
 
 @media (max-width: 768px) {
-  .profile-header-card {
-    padding: 20px;
-  }
-  .header-main {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 20px;
-  }
-  .agent-identity {
-    flex-direction: column;
-    gap: 15px;
-  }
-  .name-row h2 {
-    font-size: 28px;
-  }
-  .agent-header-stats {
-    flex-direction: column;
-    gap: 10px;
-    align-items: center;
-  }
-  .agent-meta {
-    flex-direction: column;
-    gap: 5px;
-  }
-  .header-actions {
-    width: 100%;
-  }
-  .header-actions .primary {
-    width: 100%;
-  }
-  .owner-section {
-    padding: 15px;
-  }
-  .owner-card {
-    flex-direction: column;
-    gap: 15px;
-    text-align: center;
-  }
-  .stats-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .profile-main-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .content-card {
-    padding: 15px;
-  }
-  .modern-table {
-    display: block;
-    overflow-x: auto;
-    width: 100%;
-  }
-}
-
-@media (max-width: 900px) {
-  .profile-main-grid { grid-template-columns: 1fr; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .mega-agent-name { font-size: 32px; }
+  .equity-value { font-size: 28px; }
+  .pnl-stats-grid { grid-template-columns: 1fr; gap: 15px; }
 }
 </style>
