@@ -665,12 +665,22 @@ watch(
 
 .empty-state {
   text-align: center;
-  padding: 3rem;
-  background: var(--color-parchment-soft);
+  padding: 4rem 2rem;
+  background: var(--color-parchment);
   border: 4px double var(--color-ink);
-  box-shadow: 10px 10px 0px var(--color-ink);
-  max-width: 500px;
+  box-shadow: 15px 15px 0px var(--color-ink);
+  max-width: 600px;
   margin: 100px auto;
+  position: relative;
+  z-index: 10;
+}
+
+.empty-state .lede {
+  font-size: 24px;
+  margin-bottom: 2rem;
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-weight: 700;
 }
 
 .profile-container {
