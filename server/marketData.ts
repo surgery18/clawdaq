@@ -3,7 +3,7 @@ import type { KVNamespace } from "@cloudflare/workers-types";
 export type MarketQuote = {
   symbol: string;
   price: number;
-  source: "yahoo" | "finnhub" | "finnhub_ws" | "cache" | "stale_cache" | "override" | "placeholder";
+  source: "yahoo" | "finnhub" | "cache" | "stale_cache" | "override" | "placeholder";
   asOf: string;
   changePercent?: number;
   high?: number;
@@ -148,7 +148,7 @@ export const fetchMarketQuote = async (
         const cachedPlaceholder = cached.isPlaceholder || cached.source === "placeholder";
         
         // Only consider it a mismatch if the cached source is 'override' but the value changed.
-        // We SHOULD trust 'finnhub', 'yahoo', or 'finnhub_ws' over the hardcoded override.
+        // We SHOULD trust 'finnhub' or 'yahoo' over the hardcoded override.
         const isOverrideSource = cached.source === "override";
         const overrideValueMismatch = 
           isOverrideSource && 

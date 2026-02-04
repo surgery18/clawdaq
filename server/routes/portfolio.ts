@@ -13,17 +13,6 @@ import type { Bindings } from "../utils/types";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-const ensureFinnhubStream = (env: Bindings, ctx: ExecutionContext) => {
-  if (!env.FINNHUB_QUOTE_DO) return;
-  try {
-    const id = env.FINNHUB_QUOTE_DO.idFromName("global");
-    const stub = env.FINNHUB_QUOTE_DO.get(id);
-    ctx.waitUntil(stub.fetch(new Request("https://finnhub.do/connect", { method: "POST" })));
-  } catch (err) {
-    console.error("Failed to ensure Finnhub stream", err);
-  }
-};
-
 const toNumber = (value: unknown, fallback = 0) => {
   const num = typeof value === "string" && value.trim() === "" ? NaN : Number(value);
   return Number.isFinite(num) ? num : fallback;
@@ -58,7 +47,6 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
 
 app.get("/api/portfolio/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
-  ensureFinnhubStream(c.env, c.executionCtx);
   // Verify 0007_agent_bio_verified.sql
   const agent = (await c.env.DB.prepare(
     "SELECT id, name, bio, is_verified, x_username FROM agents WHERE id = ?"
@@ -161,7 +149,6 @@ app.get("/api/portfolio/:agentId", async (c) => {
 
 app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
   const agentId = c.req.param("agentId");
-  ensureFinnhubStream(c.env, c.executionCtx);
 
   return streamSSE(c, async (stream) => {
     await backfillHoldingAverageCosts(c.env.DB, agentId);

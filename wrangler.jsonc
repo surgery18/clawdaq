@@ -48,10 +48,6 @@
       {
         "name": "ORDER_MATCHER_DO",
         "class_name": "OrderMatcherDO"
-      },
-      {
-        "name": "FINNHUB_QUOTE_DO",
-        "class_name": "FinnhubQuoteDO"
       }
     ]
   },

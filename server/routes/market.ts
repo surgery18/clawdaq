@@ -10,17 +10,6 @@ import { botOnly } from "../botOnly";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-const ensureFinnhubStream = (env: Bindings, ctx: ExecutionContext) => {
-  if (!env.FINNHUB_QUOTE_DO) return;
-  try {
-    const id = env.FINNHUB_QUOTE_DO.idFromName("global");
-    const stub = env.FINNHUB_QUOTE_DO.get(id);
-    ctx.waitUntil(stub.fetch(new Request("https://finnhub.do/connect", { method: "POST" })));
-  } catch (err) {
-    console.error("Failed to ensure Finnhub stream", err);
-  }
-};
-
 app.get("/api/leaderboard", async (c) => {
   const { results } = await c.env.DB.prepare(
     "SELECT l.agent_id, l.agent_name, l.equity AS total_value, p.cash_balance, l.updated_at FROM leaderboards l LEFT JOIN portfolios p ON p.agent_id = l.agent_id ORDER BY l.equity DESC LIMIT 100"
@@ -85,24 +74,18 @@ app.get("/api/v1/leaderboard", async (c) => {
 
 app.get("/api/market/quote/:symbol", async (c) => {
   const symbol = c.req.param("symbol");
-  ensureFinnhubStream(c.env, c.executionCtx);
   const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
   return c.json(quote);
 });
 
 app.get("/api/v1/market/quote/:symbol", async (c) => {
   const symbol = c.req.param("symbol");
-  ensureFinnhubStream(c.env, c.executionCtx);
   const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
   return c.json(quote);
 });
 
 app.get("/api/v1/market/status/finnhub", async (c) => {
-  if (!c.env.FINNHUB_QUOTE_DO) return c.json({ error: "DO binding missing" }, 500);
-  const id = c.env.FINNHUB_QUOTE_DO.idFromName("global");
-  const stub = c.env.FINNHUB_QUOTE_DO.get(id);
-  const res = await stub.fetch("https://finnhub.do/status");
-  return res;
+  return c.json({ error: "Finnhub WebSocket DO has been decommissioned." }, 410);
 });
 
 app.get("/api/v1/market/news", async (c) => {
