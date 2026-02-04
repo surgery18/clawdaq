@@ -10,14 +10,14 @@
       <input 
         v-model="symbol" 
         @keyup.enter="fetchData" 
-        placeholder="Enter Ticker (e.g. TIRX, DJT)" 
+        placeholder="Ticker (e.g. RUM)" 
         class="symbol-input"
       />
       <button @click="fetchData" class="search-btn">Scuttle!</button>
     </div>
 
     <div v-if="loading" class="loading-state">
-      <p>Consulting the ancient scrolls... (Fetching data)</p>
+      <p>Consulting the ancient scrolls...</p>
     </div>
 
     <div v-else-if="error" class="error-state">
@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -53,9 +53,12 @@ function loadChart(sym) {
     if (window.TradingView) {
       const widgetContainer = document.getElementById('tradingview-widget');
       if (widgetContainer) widgetContainer.innerHTML = '';
+      
+      const isMobile = window.innerWidth <= 768;
+      
       new window.TradingView.widget({
         width: '100%',
-        height: 700, // Reduced height back to something more reasonable
+        height: isMobile ? 450 : 700,
         symbol: sym,
         interval: 'D',
         timezone: 'America/Chicago',
@@ -64,12 +67,13 @@ function loadChart(sym) {
         locale: 'en',
         toolbar_bg: '#fcf5e5',
         enable_publishing: false,
-        hide_side_toolbar: false,
+        hide_side_toolbar: isMobile,
         allow_symbol_change: true,
         save_image: false,
         container_id: 'tradingview-widget',
         backgroundColor: '#fcf5e5',
         gridColor: 'rgba(26, 26, 26, 0.05)',
+        autosize: true,
         overrides: {
           "paneProperties.background": "#fcf5e5",
           "paneProperties.backgroundType": "solid",
@@ -105,13 +109,30 @@ function loadChart(sym) {
     }
   }
 }
+
+// Handle window resize to re-init chart if needed
+let resizeTimer;
+const handleResize = () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (activeSymbol.value) loadChart(activeSymbol.value);
+  }, 250);
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+});
 </script>
 
 <style scoped>
 .research-view {
-  max-width: 100%; /* Full width for the layout */
-  margin: 0;
-  padding: 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
   min-height: 100vh;
   font-family: 'Courier New', Courier, monospace;
   color: #333;
@@ -141,6 +162,7 @@ function loadChart(sym) {
   gap: 10px;
   justify-content: center;
   margin-bottom: 40px;
+  flex-wrap: wrap;
 }
 
 .symbol-input {
@@ -149,6 +171,7 @@ function loadChart(sym) {
   border: 3px solid #333;
   background: #fff;
   width: 300px;
+  max-width: 100%;
   font-family: inherit;
 }
 
@@ -174,12 +197,14 @@ function loadChart(sym) {
   padding: 10px;
   box-shadow: 10px 10px 0px #333;
   margin-bottom: 40px;
-  min-height: 700px; /* Match reduced height */
+  min-height: 450px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #tradingview-widget {
   width: 100%;
-  height: 700px;
+  min-height: 450px;
 }
 
 .loading-state, .error-state {
@@ -189,4 +214,13 @@ function loadChart(sym) {
 }
 
 .error-state { color: #b71c1c; }
+
+@media (max-width: 768px) {
+  .research-view { padding: 20px 10px; }
+  .title { font-size: 2rem; }
+  .symbol-input { width: 100%; }
+  .search-btn { width: 100%; }
+  .chart-wrapper { box-shadow: 5px 5px 0px #333; padding: 5px; min-height: 450px; }
+  #tradingview-widget { min-height: 450px; }
+}
 </style>
