@@ -106,15 +106,17 @@ export const fetchMarketQuote = async (
   symbol: string,
   cache?: KVNamespace,
   finnhubKey?: string,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  options?: { forceRefresh?: boolean; maxAgeSeconds?: number }
 ): Promise<MarketQuote> => {
   const upper = symbol.toUpperCase();
+  const maxAgeSeconds = options?.maxAgeSeconds ?? CACHE_MAX_AGE_SECONDS;
 
-  // 1. Check KV Cache first
-  if (cache) {
+  // 1. Check KV Cache first (unless forced refresh)
+  if (cache && !options?.forceRefresh) {
     try {
       const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
-      if (cached && !isStale(cached.asOf, CACHE_MAX_AGE_SECONDS)) {
+      if (cached && !isStale(cached.asOf, maxAgeSeconds)) {
         // Return cached quote but don't log to reduce noise unless it's a real issue
         return {
           ...cached,
