@@ -78,7 +78,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
     (holdingsRows.results ?? []).map(async (row) => {
       const shares = toNumber(row?.quantity ?? 0);
       const averageCost = toNumber(row?.average_cost ?? 0);
-      const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE);
+      const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE, c.env.FINNHUB_API_KEY);
       const price = toNumber(quote.price ?? 0);
       const value = Number((shares * price).toFixed(2));
       return {
@@ -163,7 +163,7 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
 
       const holdings = await Promise.all(
         (holdingsRows.results ?? []).map(async (row) => {
-          const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE);
+          const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE, c.env.FINNHUB_API_KEY);
           const shares = toNumber(row?.quantity ?? 0);
           const averageCost = toNumber(row?.average_cost ?? 0);
           const price = toNumber(quote.price ?? 0);
@@ -248,7 +248,7 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
   const holdings = await Promise.all(
     (holdingsRows.results ?? []).map(async (row) => {
       const shares = toNumber(row?.quantity ?? 0);
-      const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE);
+      const quote = await fetchMarketQuote(String(row?.symbol ?? ""), c.env.CACHE, c.env.FINNHUB_API_KEY);
       const price = toNumber(quote.price ?? 0);
       const value = Number((shares * price).toFixed(2));
       return { symbol: row?.symbol ?? "", shares, value, price };

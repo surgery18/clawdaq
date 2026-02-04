@@ -683,6 +683,28 @@ watch(
   font-weight: 700;
 }
 
+.empty-state .primary {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+  border: none;
+  padding: 16px 32px;
+  font-family: var(--font-typewriter);
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 6px 6px 0px var(--color-dollar);
+  transition: all 0.1s ease;
+  display: inline-block;
+  text-decoration: none;
+}
+
+.empty-state .primary:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px var(--color-dollar);
+  background: var(--color-dollar);
+  color: white;
+}
+
 .profile-container {
   max-width: 1200px;
   margin: 0 auto;
