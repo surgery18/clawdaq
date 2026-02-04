@@ -141,7 +141,8 @@ app.post("/api/v1/verify/:token", async (c) => {
   }
 
   // Extract X username from the URL
-  const xMatch = tweetUrl.match(/(?:x\.com|twitter\.com)\/([^\/]+)/);
+  // Improved regex to skip '/i/' or other internal paths and capture the real handle
+  const xMatch = tweetUrl.match(/(?:x\.com|twitter\.com)\/(?!i\/)([^/]+)\/status/);
   const xUsername = xMatch ? xMatch[1] : null;
 
   if (!xUsername) {

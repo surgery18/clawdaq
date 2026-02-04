@@ -270,11 +270,42 @@ onMounted(loadBriefing);
   text-align: center;
 }
 
+@media (max-width: 480px) {
+  .verify-pending, .verify-success {
+    padding: 1.5rem 1rem;
+  }
+}
+
 .success-box {
   background: var(--color-parchment-soft);
   border: 1px dashed var(--color-dollar);
   padding: 20px;
   margin-top: 20px;
+}
+
+.credential-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-ink-faint);
+  padding-bottom: 5px;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .credential-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+.credential-row label {
+  font-size: 0.8rem;
+  color: var(--color-ink);
+  opacity: 0.7;
 }
 
 .tab-container {
@@ -298,6 +329,13 @@ onMounted(loadBriefing);
   cursor: pointer;
   text-transform: uppercase;
   transition: 0.2s;
+}
+
+@media (max-width: 480px) {
+  .tab-btn {
+    font-size: 10px;
+    padding: 10px 5px;
+  }
 }
 
 .tab-btn.active {
@@ -336,6 +374,13 @@ onMounted(loadBriefing);
   border-left: 4px solid var(--color-dollar);
   word-break: break-all;
   text-align: left; /* Ensure text stays left-aligned */
+}
+
+@media (max-width: 480px) {
+  .terminal-box {
+    font-size: 11px;
+    padding: 10px;
+  }
 }
 
 .terminal-box pre {
