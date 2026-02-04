@@ -16,11 +16,19 @@ const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbol
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
 const CACHE_TTL_SECONDS = 30; // Reduced from 60 to 30 for fresher prices
+const CACHE_MAX_AGE_SECONDS = 90; // Strict staleness check for cached quotes
 
 const toNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
 const roundPrice = (value: number) => Math.max(0.01, Math.round(value * 100) / 100);
+
+const isStale = (asOf: string | undefined, maxAgeSeconds: number): boolean => {
+  if (!asOf) return true;
+  const timestamp = Date.parse(asOf);
+  if (!Number.isFinite(timestamp)) return true;
+  return Date.now() - timestamp > maxAgeSeconds * 1000;
+};
 
 const fetchFromFinnhub = async (
   symbol: string,
@@ -34,12 +42,15 @@ const fetchFromFinnhub = async (
       const data = await response.json().catch(() => null) as any;
       const price = toNumber(data?.c); // Current price
       if (price !== null && price !== 0) {
+        const providerTimestamp = toNumber(data?.t);
+        const asOf = providerTimestamp ? new Date(providerTimestamp * 1000).toISOString() : new Date().toISOString();
         return {
           price: roundPrice(price),
           changePercent: toNumber(data?.dp) || 0, // Percent change
           high: toNumber(data?.h) || undefined,
           low: toNumber(data?.l) || undefined,
-          source: "finnhub"
+          source: "finnhub",
+          asOf
         };
       }
     } else if (response.status === 429) {
@@ -69,6 +80,8 @@ const fetchFromYahoo = async (
       const price = toNumber(result?.regularMarketPrice);
 
       if (price !== null) {
+        const providerTimestamp = toNumber(result?.regularMarketTime);
+        const asOf = providerTimestamp ? new Date(providerTimestamp * 1000).toISOString() : new Date().toISOString();
         return {
           price: roundPrice(price),
           changePercent: toNumber(result?.regularMarketChangePercent) || 0,
@@ -76,7 +89,8 @@ const fetchFromYahoo = async (
           low: toNumber(result?.regularMarketDayLow) || undefined,
           volume: toNumber(result?.regularMarketVolume) || undefined,
           marketCap: toNumber(result?.marketCap) || undefined,
-          source: "yahoo"
+          source: "yahoo",
+          asOf
         };
       }
     } else if (response.status === 429) {
@@ -95,13 +109,12 @@ export const fetchMarketQuote = async (
   fetcher: typeof fetch = fetch
 ): Promise<MarketQuote> => {
   const upper = symbol.toUpperCase();
-  const asOf = new Date().toISOString();
 
   // 1. Check KV Cache first
   if (cache) {
     try {
       const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
-      if (cached) {
+      if (cached && !isStale(cached.asOf, CACHE_MAX_AGE_SECONDS)) {
         // Return cached quote but don't log to reduce noise unless it's a real issue
         return {
           ...cached,
@@ -117,7 +130,11 @@ export const fetchMarketQuote = async (
   if (finnhubKey) {
     const finnhubData = await fetchFromFinnhub(upper, finnhubKey, fetcher);
     if (finnhubData) {
-      const quote: MarketQuote = { ...finnhubData, symbol: upper, asOf } as MarketQuote;
+      const quote: MarketQuote = {
+        ...finnhubData,
+        symbol: upper,
+        asOf: finnhubData.asOf ?? new Date().toISOString()
+      } as MarketQuote;
       if (cache) {
         await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(quote), { expirationTtl: CACHE_TTL_SECONDS });
       }
@@ -128,7 +145,11 @@ export const fetchMarketQuote = async (
   // 3. Try Backup Provider: Yahoo
   const yahooData = await fetchFromYahoo(upper, fetcher);
   if (yahooData) {
-    const quote: MarketQuote = { ...yahooData, symbol: upper, asOf } as MarketQuote;
+    const quote: MarketQuote = {
+      ...yahooData,
+      symbol: upper,
+      asOf: yahooData.asOf ?? new Date().toISOString()
+    } as MarketQuote;
     if (cache) {
       await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(quote), { expirationTtl: CACHE_TTL_SECONDS });
     }
@@ -155,7 +176,7 @@ export const fetchMarketQuote = async (
       price: overridePrice,
       changePercent: 0,
       source: "mock",
-      asOf
+      asOf: new Date().toISOString()
     };
     if (cache) {
       await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 60 });
