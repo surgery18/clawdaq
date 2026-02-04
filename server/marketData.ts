@@ -137,14 +137,19 @@ export const fetchMarketQuote = async (
     try {
       const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
       if (cached) {
-        if (!options?.forceRefresh && !isStale(cached.asOf, maxAgeSeconds)) {
+        const cachedPrice = toNumber(cached.price);
+        const cachedValid = cachedPrice !== null && cachedPrice > 0;
+        if (!options?.forceRefresh && cachedValid && !isStale(cached.asOf, maxAgeSeconds)) {
           // Return cached quote but don't log to reduce noise unless it's a real issue
           return {
             ...cached,
+            price: cachedPrice,
             source: "cache"
           };
         }
-        staleCandidate = cached;
+        if (cachedValid) {
+          staleCandidate = cached;
+        }
       }
     } catch (e) {
       console.error(`KV Cache read failed for ${upper}:`, e);
