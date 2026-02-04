@@ -60,7 +60,7 @@ export class OrderMatcherDO {
 
     for (const symbol of symbols) {
       // 3. Get current market price
-      const quote = await fetchMarketQuote(symbol as string);
+      const quote = await fetchMarketQuote(symbol as string, this.env.CACHE);
       const currentPrice = quote.price;
 
       const ordersForSymbol = pendingOrders.filter((o) => o.symbol === symbol);

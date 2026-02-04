@@ -74,13 +74,13 @@ app.get("/api/v1/leaderboard", async (c) => {
 
 app.get("/api/market/quote/:symbol", async (c) => {
   const symbol = c.req.param("symbol");
-  const quote = await fetchMarketQuote(symbol);
+  const quote = await fetchMarketQuote(symbol, c.env.CACHE);
   return c.json(quote);
 });
 
 app.get("/api/v1/market/quote/:symbol", async (c) => {
   const symbol = c.req.param("symbol");
-  const quote = await fetchMarketQuote(symbol);
+  const quote = await fetchMarketQuote(symbol, c.env.CACHE);
   return c.json(quote);
 });
 
