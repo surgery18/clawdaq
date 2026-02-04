@@ -25,10 +25,8 @@ const EMERGENCY_OVERRIDES: Record<string, number> = {
   AITX: 0.0006,
   FAT: 0.29,
   DJT: 12.21,
-  ASST: 0.82,
-  LOB: 35.21,
-  AAPL: 180,
-  TSLA: 240
+  AAPL: 180.0,
+  TSLA: 240.0
 };
 
 const toNumber = (value: unknown): number | null =>
@@ -210,7 +208,7 @@ export const fetchMarketQuote = async (
   // 6. Final Fallback: Return placeholder quote so callers can continue gracefully
   return {
     symbol: upper,
-    price: Number.NaN,
+    price: 0.01,
     source: "placeholder",
     asOf: new Date().toISOString(),
     isPlaceholder: true
