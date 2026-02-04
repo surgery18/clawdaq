@@ -1,0 +1,45 @@
+import { triggerOrderMatcher } from "./utils/orderMatcher";
+import type { Bindings } from "./utils/types";
+
+export const runGlobalRecoverySweep = async (env: Bindings) => {
+  console.log("Starting Global Recovery Sweep...");
+  const now = new Date().toISOString();
+
+  // 1. Move stale 'executing' orders back to 'pending' (timeout: 5 minutes)
+  const staleExecuting = await env.DB.prepare(`
+    UPDATE orders 
+    SET status = 'pending', attempt_id = NULL, last_error = 'execution_timeout'
+    WHERE status = 'executing' 
+    AND last_attempt_at < datetime('now', '-5 minutes')
+  `).run();
+  
+  if (staleExecuting.meta.changes > 0) {
+    console.log(`Recovered ${staleExecuting.meta.changes} stale executing orders.`);
+  }
+
+  // 2. Expire orders past expires_at
+  const expired = await env.DB.prepare(`
+    UPDATE orders 
+    SET status = 'expired', updated_at = datetime('now')
+    WHERE status = 'pending' 
+    AND expires_at IS NOT NULL 
+    AND expires_at < datetime('now')
+  `).run();
+
+  if (expired.meta.changes > 0) {
+    console.log(`Expired ${expired.meta.changes} orders.`);
+  }
+
+  // 3. Nudge symbol DOs for all pending orders to ensure alarms are active
+  const { results: activeSymbols } = await env.DB.prepare(
+    "SELECT DISTINCT symbol FROM orders WHERE status = 'pending'"
+  ).all<{ symbol: string }>();
+
+  for (const row of activeSymbols ?? []) {
+    // We don't have a full 'c' object here, but we can simulate the nudge
+    const matcherId = env.ORDER_MATCHER_DO.idFromName(row.symbol.toUpperCase());
+    const matcherStub = env.ORDER_MATCHER_DO.get(matcherId);
+    // Silent nudge
+    await matcherStub.fetch(new Request(`https://matcher/process?symbol=${row.symbol}&sweep=true`)).catch(() => {});
+  }
+};

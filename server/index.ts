@@ -4,11 +4,15 @@ import marketRoutes from "./routes/market";
 import orderRoutes from "./routes/order";
 import portfolioRoutes from "./routes/portfolio";
 import gossipRoutes from "./routes/gossip";
+import { runGlobalRecoverySweep } from "./utils/recovery";
 import type { Bindings } from "./utils/types";
 
 const app = new Hono<{ Bindings: Bindings }>();
 
 const recordPortfolioSnapshots = async (env: Bindings) => {
+  // Run Recovery Sweep alongside snapshots
+  await runGlobalRecoverySweep(env);
+
   const { results } = await env.DB.prepare(
     "SELECT a.id as agent_id, p.cash_balance, p.equity FROM agents a JOIN portfolios p ON p.agent_id = a.id WHERE a.status = 'active'"
   ).all();

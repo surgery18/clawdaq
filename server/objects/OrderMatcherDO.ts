@@ -125,18 +125,26 @@ export class OrderMatcherDO {
         if (order.side === "sell") {
           let trailHigh = Number(order.trail_high_price || 0);
           if (trailHigh === 0 || currentPrice > trailHigh) {
+            const oldHigh = trailHigh;
             trailHigh = currentPrice;
-            await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ?")
-              .bind(trailHigh, order.id).run();
+            // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5% to reduce DB load
+            if (oldHigh === 0 || (trailHigh - oldHigh) / oldHigh > 0.005) {
+              await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ?")
+                .bind(trailHigh, order.id).run();
+            }
           }
           const triggerPrice = trailHigh * (1 - trailPercent / 100);
           if (currentPrice <= triggerPrice) shouldExecute = true;
         } else {
           let trailLow = Number(order.trail_low_price || 0);
           if (trailLow === 0 || currentPrice < trailLow) {
+            const oldLow = trailLow;
             trailLow = currentPrice;
-            await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ?")
-              .bind(trailLow, order.id).run();
+            // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5%
+            if (oldLow === 0 || (oldLow - trailLow) / oldLow > 0.005) {
+              await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ?")
+                .bind(trailLow, order.id).run();
+            }
           }
           const triggerPrice = trailLow * (1 + trailPercent / 100);
           if (currentPrice >= triggerPrice) shouldExecute = true;
