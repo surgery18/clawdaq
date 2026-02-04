@@ -95,7 +95,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
         c.env.CACHE,
         c.env.FINNHUB_API_KEY,
         fetch,
-        { maxAgeSeconds: 60 }
+        { forceRefresh: true }
       );
       const price = toNumber(quote.price ?? 0);
       const value = Number((shares * price).toFixed(2));
