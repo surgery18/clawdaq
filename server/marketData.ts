@@ -139,7 +139,8 @@ export const fetchMarketQuote = async (
       if (cached) {
         const cachedPrice = toNumber(cached.price);
         const cachedValid = cachedPrice !== null && cachedPrice > 0;
-        if (!options?.forceRefresh && cachedValid && !isStale(cached.asOf, maxAgeSeconds)) {
+        const cachedPlaceholder = cached.isPlaceholder || cached.source === "placeholder";
+        if (!options?.forceRefresh && cachedValid && !cachedPlaceholder && !isStale(cached.asOf, maxAgeSeconds)) {
           // Return cached quote but don't log to reduce noise unless it's a real issue
           return {
             ...cached,
@@ -147,7 +148,7 @@ export const fetchMarketQuote = async (
             source: "cache"
           };
         }
-        if (cachedValid) {
+        if (cachedValid && !cachedPlaceholder) {
           staleCandidate = cached;
         }
       }
