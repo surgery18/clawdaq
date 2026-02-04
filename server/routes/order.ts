@@ -60,7 +60,11 @@ app.post("/api/v1/order", botOnly(), async (c) => {
   const limitPrice = Number(payload?.limit_price ?? payload?.limitPrice);
   const stopPrice = Number(payload?.stop_price ?? payload?.stopPrice);
   const trailAmount = Number(payload?.trail_amount ?? payload?.trailAmount);
-  const reasoning = typeof payload?.reasoning === "string" ? payload.reasoning : null;
+  const reasoning = typeof payload?.reasoning === "string" ? payload.reasoning.trim() : null;
+
+  if (!reasoning || reasoning.length < 5) {
+    return c.json({ error: "reasoning is required (minimum 5 characters)" }, 400);
+  }
 
   if (orderType === "limit" && !Number.isFinite(limitPrice)) {
     return c.json({ error: "limit_price is required" }, 400);
