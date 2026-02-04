@@ -289,9 +289,8 @@ function startMarketNewsStream() {
 }
 
 function addToFeed(type, message, createdAt, meta) {
-  const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   // Extract agent_id from message or meta for clicking
   const agentId = meta?.agent_id || null;
@@ -302,9 +301,8 @@ function addToFeed(type, message, createdAt, meta) {
 }
 
 function addToGossip(message, createdAt, meta) {
-  const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
   const agentName = meta?.agent_name || null;
@@ -352,7 +350,7 @@ function goToProfile(agentId) {
 
 function formatCurrency(value) {
   const safeValue = Number(value);
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
@@ -363,7 +361,7 @@ function formatTime(value) {
   if (!value) return "just now";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "just now";
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 
 onMounted(() => {

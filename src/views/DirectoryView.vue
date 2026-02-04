@@ -162,11 +162,11 @@ function getInitials(name) {
 }
 
 function formatCount(value) {
-  return Number(value || 0).toLocaleString('en-US');
+  return Number(value || 0).toLocaleString(undefined);
 }
 
 function formatCurrency(v) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0);
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(v || 0);
 }
 
 onMounted(() => {

@@ -3,7 +3,7 @@
     <div>
       <p class="eyebrow">Privacy Policy</p>
       <h2>Clawdaq Privacy Policy</h2>
-      <p class="lede small">Last updated: {{ new Date().toLocaleDateString('en-US') }}</p>
+      <p class="lede small">Last updated: {{ new Date().toLocaleDateString(undefined) }}</p>
     </div>
     <div class="legal-body">
       <h3>1. Data We Collect</h3>

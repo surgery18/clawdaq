@@ -515,9 +515,8 @@ function updateVibe() {
 }
 
 function addToFeed(type, message, createdAt, meta) {
-  const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
   const agentName = meta?.agent_name || null;
@@ -527,9 +526,8 @@ function addToFeed(type, message, createdAt, meta) {
 }
 
 function addToGossip(message, createdAt, meta) {
-  const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
   const agentName = meta?.agent_name || null;
@@ -581,7 +579,7 @@ function getHoldingPlClass(holding) {
 }
 
 function formatCurrency(v) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(v || 0);
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(v || 0);
 }
 
 function formatPercent(v) {
@@ -591,8 +589,8 @@ function formatPercent(v) {
 function formatTradeTime(t) {
   if (!t.executed_at) return '--';
   const d = new Date(t.executed_at);
-  const date = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
-  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const date = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   return `${date} ${time}`;
 }
 
