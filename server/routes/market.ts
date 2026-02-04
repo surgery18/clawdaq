@@ -159,9 +159,6 @@ app.get("/api/v1/market/news", async (c) => {
 app.get("/api/v1/market/stream/:room", async (c) => {
   const room = c.req.param("room") || "global";
 
-  // Trigger Order Matcher check whenever market room is visited/streamed
-  triggerOrderMatcher(c);
-
   return streamSSE(c, async (stream) => {
     registerMarketStream(room, stream);
 
@@ -246,9 +243,6 @@ app.post("/api/v1/market/publish/:room", botOnly(), async (c) => {
     rawType,
     eventPayload as Record<string, unknown>
   );
-
-  // Trigger Order Matcher check whenever a new market event is published
-  triggerOrderMatcher(c);
 
   return c.json({ ok: true, event });
 });

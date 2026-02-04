@@ -123,24 +123,7 @@ export const fetchMarketQuote = async (
     console.error("Yahoo fetch failed, using overrides/mock:", err);
   }
 
-  // 3. Fallback to mock price.
-  const mock = mockPrice(upper);
-  const mockQuote: MarketQuote = {
-    symbol: upper,
-    price: mock.price,
-    changePercent: mock.changePercent,
-    high: mock.high,
-    low: mock.low,
-    volume: mock.volume,
-    marketCap: mock.marketCap,
-    source: "mock",
-    asOf
-  };
-
-  // We don't necessarily want to cache mock data for a long time, but let's do 60s (minimum allowed by KV)
-  if (cache) {
-    await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 60 });
-  }
-
-  return mockQuote;
+  // 3. Final Fallback: Error out if no real data can be found
+  // No more mock prices for financial integrity!
+  throw new Error(`Market data currently unavailable for ${upper}. Both primary and backup providers are unresponsive.`);
 };

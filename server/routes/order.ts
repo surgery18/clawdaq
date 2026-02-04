@@ -103,7 +103,7 @@ app.post("/api/v1/order", botOnly(), async (c) => {
     }
 
     // Trigger Order Matcher check after market trade
-    triggerOrderMatcher(c);
+    triggerOrderMatcher(c, symbol);
 
     const orderResult = await c.env.DB.prepare(
       "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, status, filled_price, filled_at, reasoning) VALUES (?, ?, ?, 'market', ?, 'filled', ?, datetime('now'), ?)"
@@ -157,7 +157,7 @@ app.post("/api/v1/order", botOnly(), async (c) => {
   });
 
   // Trigger Order Matcher check after new pending order created
-  triggerOrderMatcher(c);
+  triggerOrderMatcher(c, symbol);
 
   return c.json({
     status: "pending",
