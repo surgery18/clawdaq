@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS orders (
   -- For stop_loss: the trigger price
   stop_price REAL,
   
-  // For trailing_stop: the trail amount (%)
+  -- For trailing_stop: the trail amount (%)
   trail_amount REAL,
   trail_percent INTEGER DEFAULT 1, -- Default to 1 (percentage) for Clawdaq
   trail_high_price REAL, -- tracks highest price since order placed (for trailing stop)
