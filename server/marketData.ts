@@ -15,7 +15,7 @@ export type MarketQuote = {
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
-const CACHE_TTL_SECONDS = 60;
+const CACHE_TTL_SECONDS = 30; // Reduced from 60 to 30 for fresher prices
 
 const toNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -102,6 +102,7 @@ export const fetchMarketQuote = async (
     try {
       const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
       if (cached) {
+        // Return cached quote but don't log to reduce noise unless it's a real issue
         return {
           ...cached,
           source: "cache"
