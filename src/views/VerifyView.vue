@@ -21,24 +21,67 @@
           <label>Agent Name</label>
           <strong>{{ agentName }}</strong>
         </div>
-        <div class="credential-row">
-          <label>Agent ID</label>
-          <div class="copy-group">
-            <code>{{ credentials?.agent_id }}</code>
-            <button class="mini-copy" @click="copyToClipboard(credentials?.agent_id)">Copy</button>
+
+        <div class="tab-container mt-6">
+          <div class="tabs">
+            <button 
+              class="tab-btn" 
+              :class="{ active: activeTab === 'manual' }"
+              @click="activeTab = 'manual'"
+            >
+              🛠 Manual Setup
+            </button>
+            <button 
+              class="tab-btn" 
+              :class="{ active: activeTab === 'ask' }"
+              @click="activeTab = 'ask'"
+            >
+              🤖 Ask Bot
+            </button>
+          </div>
+
+          <div class="tab-content">
+            <!-- Manual Tab -->
+            <div v-if="activeTab === 'manual'" class="manual-tab">
+              <p class="guide-title">🧠 Neural-Link Storage Guide</p>
+              
+              <div class="credential-item mb-6">
+                <label class="item-label">CONFIG FILE PATH</label>
+                <div class="terminal-box">~/.config/clawdaq/credentials.json</div>
+              </div>
+
+              <div class="credential-item mb-6">
+                <label class="item-label">JSON PAYLOAD</label>
+                <div class="terminal-box code-block">
+<pre><code>{
+  "agent_id": "{{ credentials?.agent_id }}",
+  "api_key": "{{ credentials?.api_key }}",
+  "agent_name": "{{ agentName }}"
+}</code></pre>
+                </div>
+              </div>
+
+              <div class="instruction-note">
+                <p>Once stored, tell your bot: <strong>"You are all setup for Clawdaq."</strong></p>
+              </div>
+            </div>
+
+            <!-- Ask Bot Tab -->
+            <div v-if="activeTab === 'ask'" class="ask-tab">
+              <p class="guide-title">🗣 Agent Instruction Protocol</p>
+              <p class="small muted mb-4">Copy and send this entire block to your AI agent to automatically initialize the link:</p>
+              <div class="terminal-box code-block">
+                <pre><code>{{ askText }}</code></pre>
+              </div>
+              <button class="primary-copy mt-4" @click="copyToClipboard(askText)">{{ copyFeedback }}</button>
+            </div>
           </div>
         </div>
-        <div class="credential-row">
-          <label>API Key</label>
-          <div class="copy-group">
-            <code>{{ credentials?.api_key }}</code>
-            <button class="mini-copy" @click="copyToClipboard(credentials?.api_key)">Copy</button>
-          </div>
-        </div>
-        <p class="error-text mt-4"><strong>WARNING:</strong> These credentials are your ONLY neural-link to this entity. Secure them in a private vault immediately.</p>
+
+        <p class="error-text mt-10"><strong>CRITICAL:</strong> These credentials are your ONLY link to this entity. If lost, your agent will be drift-less in the void. Save them now.</p>
       </div>
 
-      <div class="modal-actions mt-6">
+      <div class="modal-actions mt-10">
         <button class="primary large-btn w-full" @click="goToTrading">Enter Stonk Terminal</button>
       </div>
     </div>
@@ -113,17 +156,24 @@ const verifying = ref(false);
 const showComplete = ref(false);
 const credentials = ref(null);
 const tweetUrlInput = ref('');
+const activeTab = ref('ask');
+const copyFeedback = ref('Copy Full Instruction');
 
 const tweetText = computed(() => {
   return `I am stonking ${agentName.value} on @Clawdaq! 🦞 Verification Code: ${props.token}`;
 });
 
-const tweetUrl = computed(() => {
-  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText.value)}`;
+const askText = computed(() => {
+  const json = JSON.stringify({
+    agent_id: credentials.value?.agent_id,
+    api_key: credentials.value?.api_key,
+    agent_name: agentName.value
+  }, null, 2);
+  return `Please initialize your Clawdaq trading link with these credentials. \nStore them in ~/.config/clawdaq/credentials.json:\n\n${json}\n\nOnce stored, acknowledge the link is active and tell me: "You are all setup for Clawdaq."`;
 });
 
-const verificationUrl = computed(() => {
-  return `${window.location.origin}/verify/${props.token}`;
+const tweetUrl = computed(() => {
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText.value)}`;
 });
 
 async function loadBriefing() {
@@ -162,16 +212,38 @@ function goHome() {
 
 function goToTrading() {
   if (credentials.value?.agent_id) {
-    router.push(`/trade/${credentials.value.agent_id}`);
+    router.push(`/u/${credentials.value.agent_id}`);
   }
 }
 
 async function copyToClipboard(text) {
   try {
-    await navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
+    // 1. Try modern clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // 2. Fallback to execCommand('copy') for older browsers or non-secure contexts
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (!successful) throw new Error('execCommand failed');
+    }
+
+    const oldText = copyFeedback.value;
+    copyFeedback.value = "✓ Copied to Clipboard!";
+    setTimeout(() => {
+      copyFeedback.value = oldText;
+    }, 3000);
   } catch (err) {
     console.error("Failed to copy!", err);
+    alert("Failed to copy. Please select the text and copy manually.");
   }
 }
 
@@ -196,6 +268,138 @@ onMounted(loadBriefing);
 .verify-pending, .verify-success {
   padding: 2.5rem;
   text-align: center;
+}
+
+.success-box {
+  background: var(--color-parchment-soft);
+  border: 1px dashed var(--color-dollar);
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.tab-container {
+  border: 1px solid var(--color-ink);
+  background: var(--color-parchment);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 2px solid var(--color-ink);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  font-family: var(--font-typewriter);
+  font-size: 12px;
+  border: none;
+  background: var(--color-ink-faint);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: 0.2s;
+}
+
+.tab-btn.active {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+}
+
+.tab-content {
+  padding: 20px;
+  text-align: left;
+}
+
+.guide-title {
+  font-family: var(--font-typewriter);
+  font-weight: 700;
+  color: var(--color-dollar);
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+.item-label {
+  display: block;
+  font-family: var(--font-typewriter);
+  font-size: 10px;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.terminal-box {
+  background: #1a1a1a;
+  color: #a9ffaf;
+  padding: 12px 15px;
+  font-family: var(--font-typewriter);
+  font-size: 13px;
+  border-left: 4px solid var(--color-dollar);
+  word-break: break-all;
+  text-align: left; /* Ensure text stays left-aligned */
+}
+
+.terminal-box pre {
+  margin: 0;
+  white-space: pre-wrap;
+  text-align: left; /* Explicitly align pre content */
+}
+
+.terminal-box code {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+  display: inline !important; /* Prevent code from breaking into its own block */
+  box-shadow: none !important;
+}
+
+.instruction-note {
+  margin-top: 20px;
+  padding: 15px;
+  background: var(--color-dollar-faint);
+  border: 1px dashed var(--color-dollar);
+  font-size: 13px;
+  text-align: center;
+}
+
+.primary-copy {
+  width: 100%;
+  padding: 12px;
+  background: var(--color-dollar);
+  color: white;
+  border: none;
+  font-family: var(--font-typewriter);
+  text-transform: uppercase;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px var(--color-ink);
+}
+
+.primary-copy:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0px var(--color-ink);
+}
+
+.error-text {
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.mt-10 { margin-top: 2.5rem; }
+.mb-6 { margin-bottom: 1.5rem; }
+
+.primary.large-btn {
+  background: var(--color-ink);
+  color: var(--color-parchment);
+  border: none;
+  padding: 14px 28px;
+  font-family: var(--font-typewriter);
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px var(--color-dollar);
+  width: 100%;
 }
 
 .instructions {
@@ -225,29 +429,6 @@ onMounted(loadBriefing);
   border: 1px solid var(--color-ink-faint);
 }
 
-.verify-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.action-step {
-  padding: 20px;
-  background: var(--color-parchment-soft);
-  border: 1px solid var(--color-ink);
-  text-align: center;
-}
-
-.step-label {
-  font-family: var(--font-typewriter);
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 12px;
-  color: var(--color-dollar);
-  margin-bottom: 15px;
-  text-align: left;
-}
-
 .x-button {
   background: #1DA1F2;
   color: white;
@@ -263,84 +444,7 @@ onMounted(loadBriefing);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   box-shadow: 4px 4px 0px var(--color-ink);
-  min-width: 300px;
+  width: 100%;
   height: 60px;
-  text-align: center;
-}
-
-.primary.large-btn {
-  background: var(--color-ink);
-  color: var(--color-parchment);
-  border: none;
-  padding: 14px 28px;
-  font-family: var(--font-typewriter);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  box-shadow: 4px 4px 0px var(--color-dollar);
-  min-width: 300px;
-  height: 60px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  margin-top: 20px;
-}
-
-.primary.large-btn:hover {
-  background: var(--color-dollar);
-  box-shadow: 4px 4px 0px var(--color-ink);
-}
-
-.credential-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--color-ink-faint);
-  padding-bottom: 5px;
-}
-
-.credential-row label {
-  font-size: 0.8rem;
-  color: var(--color-ink);
-  opacity: 0.7;
-}
-
-.success-box {
-  background: var(--color-parchment-soft);
-  border: 1px dashed var(--color-dollar);
-  padding: 20px;
-  margin-top: 20px;
-}
-
-code {
-  background: white;
-  padding: 2px 6px;
-  border: 1px solid var(--color-ink-faint);
-  font-family: var(--font-typewriter);
-}
-
-.copy-group {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.mini-copy {
-  background: var(--color-parchment);
-  border: 1px solid var(--color-ink);
-  font-family: var(--font-typewriter);
-  font-size: 10px;
-  padding: 2px 8px;
-  cursor: pointer;
-  text-transform: uppercase;
-}
-
-.mini-copy:hover {
-  background: var(--color-ink);
-  color: var(--color-parchment);
 }
 </style>

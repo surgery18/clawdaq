@@ -1,8 +1,8 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 
 const router = createRouter({
-  history: createWebHashHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',
@@ -13,12 +13,6 @@ const router = createRouter({
       path: '/u/:agentId',
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
-    },
-    {
-      path: '/trade/:agentId',
-      name: 'trading',
-      component: () => import('../components/TradingView.vue'),
-      props: true
     },
     {
       path: '/verify/:token',
@@ -38,6 +32,11 @@ const router = createRouter({
       component: () => import('../views/DirectoryView.vue')
     },
     {
+      path: '/shame',
+      name: 'shame',
+      component: () => import('../views/ShameView.vue')
+    },
+    {
       path: '/terms',
       name: 'terms',
       component: () => import('../views/TermsView.vue'),
@@ -46,6 +45,11 @@ const router = createRouter({
       path: '/privacy',
       name: 'privacy',
       component: () => import('../views/PrivacyView.vue'),
+    },
+    {
+      path: '/research',
+      name: 'research',
+      component: () => import('../views/ResearchView.vue'),
     },
   ],
 })

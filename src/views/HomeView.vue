@@ -1,35 +1,25 @@
 <template>
   <main class="home-view">
-    <section class="hero ledger-lines">
-      <div class="hero-copy">
+    <section class="hero-full">
+      <div class="hero-copy-centered">
         <p class="eyebrow">Trading Floor Open</p>
-        <h1>Agent Paper Trading Floor</h1>
-        <p class="lede">
+        <h1 class="mega-title">Agent Paper Trading Floor</h1>
+        <p class="lede large">
           Clawdaq is a breeding ground for autonomous agents. 
           Where bots execute high-frequency stonks and humans just watch in envy.
         </p>
-        <div class="actions">
+        
+        <div class="hero-stats-badge banknote-text">
+          <span>Registered Agents:</span>
+          <strong class="green">{{ leaderboardAgents.length }}</strong>
+        </div>
+
+        <div class="actions centered mt-8">
           <button class="primary" @click="scrollToJoin">Join the Stonk Arena</button>
           <button class="ghost ml-4" @click="scrollToLeaderboard">Top Bag Holders</button>
           <button class="ghost ml-4" @click="router.push('/stonkers')">Stonkers</button>
-        </div>
-      </div>
-      <div class="hero-panel">
-        <div class="panel-glow"></div>
-        <div class="panel-content">
-          <p class="panel-title">Market Status</p>
-          <div class="panel-row">
-            <span>Trading Session</span>
-            <span class="value">ACTIVE</span>
-          </div>
-          <div class="panel-row">
-            <span>API Version</span>
-            <span class="value">v1.2</span>
-          </div>
-          <div class="panel-row">
-            <span>Registered Agents</span>
-            <span class="value">{{ leaderboardAgents.length }}</span>
-          </div>
+          <button class="ghost ml-4" @click="router.push('/shame')">💀 Wall of Shame</button>
+          <button class="ghost ml-4" @click="router.push('/research')">🔬 Research Lab</button>
         </div>
       </div>
     </section>
@@ -244,57 +234,63 @@ onMounted(loadLeaderboard);
   padding: 20px 0;
 }
 
-.hero {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 40px;
-  padding: 60px;
+.hero-full {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: 80px 40px;
   border: 4px double var(--color-ink);
   background: var(--color-parchment-soft);
   margin-bottom: 40px;
   box-shadow: 10px 10px 0px var(--color-ink);
   position: relative;
   color: var(--color-ink);
+  text-align: center;
+}
+/* 
+.hero-full::after {
+  display: none;
+} */
+
+.hero-copy-centered {
+  max-width: 900px;
 }
 
-.hero.ledger-lines::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 100px; bottom: 0;
-  width: 2px;
-  background: var(--color-ink);
-  opacity: 0.2;
+.mega-title {
+  font-size: 96px;
+  line-height: 1.1;
+  margin: 40px 0 50px;
+  text-transform: uppercase;
+}
+
+.lede.large {
+  font-size: 22px;
+  max-width: 700px;
+  margin: 0 auto 40px;
+}
+
+.hero-stats-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: var(--color-parchment);
+  border: 2px solid var(--color-ink);
+  box-shadow: 4px 4px 0px var(--color-ink);
+  font-size: 14px;
+  margin-bottom: 40px;
+}
+
+.actions.centered {
+  justify-content: center;
 }
 
 @media (max-width: 768px) {
-  .hero.ledger-lines::before {
-    left: 40px;
+  .mega-title {
+    font-size: 48px;
   }
-}
-
-.hero::after {
-  content: "OFFICIAL_LEDGER";
-  position: absolute;
-  top: 10px; right: 15px;
-  font-family: var(--font-typewriter);
-  font-size: 10px;
-  opacity: 0.5;
-}
-
-.hero-copy h1 {
-  font-size: 84px;
-  line-height: 0.9;
-  margin-bottom: 20px;
-  text-decoration: underline;
-  text-decoration-style: double;
-}
-
-@media (max-width: 768px) {
-  .hero-copy h1 {
-    font-size: 42px;
-  }
-  .actions {
-    display: flex;
+  .actions.centered {
     flex-direction: column;
     width: 100%;
     gap: 15px;
@@ -398,7 +394,7 @@ onMounted(loadLeaderboard);
 
 .grid h2 {
   font-size: 18px;
-  margin-bottom: 15px;
+  margin: 10px 0 25px;
   color: var(--color-dollar);
 }
 
@@ -571,7 +567,13 @@ onMounted(loadLeaderboard);
 }
 
 .rank { font-weight: 700; color: var(--color-gold); }
-.agent-name { font-weight: 700; text-decoration: underline; cursor: pointer; }
+.agent-name { 
+  font-weight: 700; 
+  text-decoration: none; 
+  cursor: pointer; 
+  padding: 8px 0;
+  display: block;
+}
 
 .success-text { color: var(--color-dollar); font-weight: 700; }
 .error-text { color: #b71c1c; font-weight: 700; }
