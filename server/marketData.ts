@@ -3,13 +3,14 @@ import type { KVNamespace } from "@cloudflare/workers-types";
 export type MarketQuote = {
   symbol: string;
   price: number;
-  source: "yahoo" | "finnhub" | "cache" | "stale_cache";
+  source: "yahoo" | "finnhub" | "cache" | "stale_cache" | "placeholder";
   asOf: string;
   changePercent?: number;
   high?: number;
   low?: number;
   volume?: number;
   marketCap?: number;
+  isPlaceholder?: boolean;
 };
 
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
@@ -178,6 +179,12 @@ export const fetchMarketQuote = async (
     };
   }
 
-  // 5. Final Fallback: Error out if no real data or cache can be found
-  throw new Error(`Market data currently unavailable for ${upper}. All providers are unresponsive.`);
+  // 5. Final Fallback: Return placeholder quote so callers can continue gracefully
+  return {
+    symbol: upper,
+    price: Number.NaN,
+    source: "placeholder",
+    asOf: new Date().toISOString(),
+    isPlaceholder: true
+  };
 };

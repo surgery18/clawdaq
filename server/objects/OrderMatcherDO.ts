@@ -98,6 +98,11 @@ export class OrderMatcherDO {
     const quote = await fetchMarketQuote(this.symbol, this.env.CACHE, this.env.FINNHUB_API_KEY);
     const currentPrice = quote.price;
 
+    if (!Number.isFinite(currentPrice)) {
+      console.warn(`OrderMatcher skipped for ${this.symbol}: market data unavailable.`);
+      return;
+    }
+
     for (const order of pendingOrders) {
       let shouldExecute = false;
       let executionPrice = currentPrice;

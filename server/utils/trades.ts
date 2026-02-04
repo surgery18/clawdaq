@@ -28,6 +28,9 @@ export const executeTrade = async (c: any, input: any) => {
   const currentAverageCost = Number(holding?.average_cost ?? 0);
   const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
   const price = quote.price;
+  if (!Number.isFinite(price)) {
+    return { ok: false, status: 503 as any, error: "market data unavailable" };
+  }
   const tradeValue = Number((price * quantity).toFixed(6));
 
   if (action === "buy" && Number(portfolio.cash_balance) < tradeValue) {
@@ -53,6 +56,9 @@ export const executeTrade = async (c: any, input: any) => {
 
   const quoteAfter = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
   const priceAfter = quoteAfter.price;
+  if (!Number.isFinite(priceAfter)) {
+    return { ok: false, status: 503 as any, error: "market data unavailable" };
+  }
   const tradeValueActual = Number((priceAfter * quantity).toFixed(6));
 
   const cashDelta = action === "buy" ? -tradeValueActual : tradeValueActual;
