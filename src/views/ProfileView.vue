@@ -320,6 +320,15 @@ let vibeInterval = null;
 let equityPulseTimer = null;
 const STARTING_CASH = 10000;
 
+function ensureUTC(dateStr) {
+  if (!dateStr) return null;
+  if (typeof dateStr !== 'string') return dateStr;
+  if (!dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('GMT')) {
+    return dateStr.replace(' ', 'T') + 'Z';
+  }
+  return dateStr;
+}
+
 // Computed Properties
 const totalValue = computed(() => {
   if (!agent.value) return 0;
@@ -515,7 +524,7 @@ function updateVibe() {
 }
 
 function addToFeed(type, message, createdAt, meta) {
-  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const dateObj = createdAt ? new Date(ensureUTC(createdAt)) : new Date();
   const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
@@ -526,7 +535,7 @@ function addToFeed(type, message, createdAt, meta) {
 }
 
 function addToGossip(message, createdAt, meta) {
-  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const dateObj = createdAt ? new Date(ensureUTC(createdAt)) : new Date();
   const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
@@ -549,7 +558,7 @@ function getPlPercent(trade) {
   const side = trade.side || trade.action;
   if (side === 'buy') return '—';
   // Find corresponding buy
-  const buy = agent.value.trades.find(t => (t.ticker === trade.ticker || t.symbol === trade.ticker) && (t.side === 'buy' || t.action === 'buy') && new Date(t.executed_at || t.time) < new Date(trade.executed_at || trade.time));
+  const buy = agent.value.trades.find(t => (t.ticker === trade.ticker || t.symbol === trade.ticker) && (t.side === 'buy' || t.action === 'buy') && new Date(ensureUTC(t.executed_at || t.time)) < new Date(ensureUTC(trade.executed_at || trade.time)));
   if (!buy) return '—';
   const diff = (trade.price - buy.price) * trade.quantity;
   const pct = ((trade.price - buy.price) / buy.price) * 100;
@@ -587,8 +596,9 @@ function formatPercent(v) {
 }
 
 function formatTradeTime(t) {
-  if (!t.executed_at) return '--';
-  const d = new Date(t.executed_at);
+  const timeStr = t.executed_at || t.time;
+  if (!timeStr) return '--';
+  const d = new Date(ensureUTC(timeStr));
   const date = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
   const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   return `${date} ${time}`;
@@ -601,7 +611,7 @@ function formatOrderPrice(o) {
 
 function formatJoinedDate(date) {
   if (!date) return '1/30/2026';
-  const d = new Date(date);
+  const d = new Date(ensureUTC(date));
   return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 }
 

@@ -288,8 +288,17 @@ function startMarketNewsStream() {
   };
 }
 
+function ensureUTC(dateStr) {
+  if (!dateStr) return null;
+  if (typeof dateStr !== 'string') return dateStr;
+  if (!dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('GMT')) {
+    return dateStr.replace(' ', 'T') + 'Z';
+  }
+  return dateStr;
+}
+
 function addToFeed(type, message, createdAt, meta) {
-  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const dateObj = createdAt ? new Date(ensureUTC(createdAt)) : new Date();
   const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   // Extract agent_id from message or meta for clicking
@@ -301,7 +310,7 @@ function addToFeed(type, message, createdAt, meta) {
 }
 
 function addToGossip(message, createdAt, meta) {
-  const dateObj = createdAt ? new Date(createdAt) : new Date();
+  const dateObj = createdAt ? new Date(ensureUTC(createdAt)) : new Date();
   const time = dateObj.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit' });
   
   const agentId = meta?.agent_id || null;
@@ -359,7 +368,7 @@ function formatCurrency(value) {
 
 function formatTime(value) {
   if (!value) return "just now";
-  const date = new Date(value);
+  const date = new Date(ensureUTC(value));
   if (Number.isNaN(date.getTime())) return "just now";
   return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
