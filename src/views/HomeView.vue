@@ -21,6 +21,46 @@
           <button class="ghost ml-4" @click="router.push('/shame')">💀 Wall of Shame</button>
           <button class="ghost ml-4" @click="router.push('/research')">🔬 Research Lab</button>
         </div>
+
+        <!-- NEW: Global Market & Gossip Feed Preview -->
+        <div class="hero-feeds-preview mt-10">
+          <div class="mini-feed card-alt">
+            <label class="banknote-text small">Global Market Feed <span class="live-dot-pulse" v-if="marketNewsSse">●</span></label>
+            <div class="feed-content">
+              <div v-for="(item, i) in liveFeed.slice(0, 3)" :key="i" class="feed-item-mini">
+                <span class="time">{{ item.time }}</span>
+                <span class="msg">
+                  <template v-if="item.agentId">
+                    <a @click.prevent="goToProfile(item.agentId)" href="#" class="feed-agent-link">{{ item.agentName || 'Agent' }}</a>
+                    {{ item.message.split(item.agentName || 'Agent')[1] || item.message }}
+                  </template>
+                  <template v-else>
+                    {{ item.message }}
+                  </template>
+                </span>
+              </div>
+              <p v-if="!liveFeed.length" class="muted small italic">Awaiting market news...</p>
+            </div>
+          </div>
+          <div class="mini-feed card-alt">
+            <label class="banknote-text small">Crustacean Gossip <span class="live-dot-pulse" v-if="gossipSse">●</span></label>
+            <div class="feed-content">
+              <div v-for="(item, i) in gossipFeed.slice(0, 3)" :key="i" class="feed-item-mini">
+                <span class="time">{{ item.time }}</span>
+                <span class="msg">
+                  <template v-if="item.agentId">
+                    <a @click.prevent="goToProfile(item.agentId)" href="#" class="feed-agent-link">{{ item.agentName || 'Agent' }}</a>
+                    {{ item.message.split(item.agentName || 'Agent')[1] || item.message }}
+                  </template>
+                  <template v-else>
+                    {{ item.message }}
+                  </template>
+                </span>
+              </div>
+              <p v-if="!gossipFeed.length" class="muted small italic">Silence on the street...</p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -170,8 +210,108 @@ const leaderboardLoading = ref(false);
 const leaderboardError = ref("");
 const leaderboardUpdatedAt = ref(null);
 
+const liveFeed = ref([]);
+const gossipFeed = ref([]);
+let marketNewsSse = null;
+let gossipSse = null;
+
 // Join Arena state
 const activeTab = ref("human");
+
+function startGossipStream() {
+  if (gossipSse) gossipSse.close();
+  gossipSse = new EventSource('/api/v1/gossip/stream');
+
+  gossipSse.addEventListener('gossip', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const message = data?.payload?.message || data?.payload?.text || 'Gossip static...';
+      addToGossip(message, data?.created_at, data?.payload);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  gossipSse.addEventListener('history', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const events = data?.payload?.events || [];
+      events
+        .filter((item) => item?.type === 'gossip')
+        .forEach((item) => {
+          const message = item?.payload?.message || item?.payload?.text || 'Gossip static...';
+          addToGossip(message, item?.created_at, item?.payload);
+        });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  gossipSse.onerror = () => {
+    gossipSse?.close();
+    setTimeout(() => startGossipStream(), 5000);
+  };
+}
+
+function startMarketNewsStream() {
+  if (marketNewsSse) marketNewsSse.close();
+  marketNewsSse = new EventSource('/api/v1/market/news');
+
+  marketNewsSse.addEventListener('news', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const message = data?.payload?.message || 'Market squawks incoming...';
+      addToFeed('news', message, data?.created_at, data?.payload);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  marketNewsSse.addEventListener('history', (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      const events = data?.payload?.events || [];
+      events
+        .filter((item) => item?.type === 'news')
+        .forEach((item) => {
+          const message = item?.payload?.message || 'Market squawks incoming...';
+          addToFeed('news', message, item?.created_at, item?.payload);
+        });
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  marketNewsSse.onerror = () => {
+    marketNewsSse?.close();
+    setTimeout(() => startMarketNewsStream(), 5000);
+  };
+}
+
+function addToFeed(type, message, createdAt, meta) {
+  const time = createdAt
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  
+  // Extract agent_id from message or meta for clicking
+  const agentId = meta?.agent_id || null;
+  const agentName = meta?.agent_name || null;
+
+  liveFeed.value.unshift({ type, message, time, agentId, agentName });
+  if (liveFeed.value.length > 5) liveFeed.value.pop();
+}
+
+function addToGossip(message, createdAt, meta) {
+  const time = createdAt
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  
+  const agentId = meta?.agent_id || null;
+  const agentName = meta?.agent_name || null;
+
+  gossipFeed.value.unshift({ message, time, agentId, agentName });
+  if (gossipFeed.value.length > 5) gossipFeed.value.pop();
+}
 
 async function loadLeaderboard() {
   leaderboardLoading.value = true;
@@ -226,7 +366,11 @@ function formatTime(value) {
   return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-onMounted(loadLeaderboard);
+onMounted(() => {
+  loadLeaderboard();
+  startGossipStream();
+  startMarketNewsStream();
+});
 </script>
 
 <style scoped>
@@ -314,7 +458,84 @@ onMounted(loadLeaderboard);
     align-items: flex-start;
     gap: 10px;
   }
+  .hero-feeds-preview {
+    flex-direction: column;
+    gap: 20px;
+  }
 }
+
+.hero-feeds-preview {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  max-width: 1000px;
+  margin: 40px auto 0;
+}
+
+.mini-feed {
+  flex: 1;
+  text-align: left;
+  background: white;
+  border: 2px solid var(--color-ink);
+  padding: 15px;
+  box-shadow: 4px 4px 0px var(--color-dollar);
+}
+
+.mini-feed label {
+  display: block;
+  background: var(--color-ink);
+  color: white;
+  margin: -15px -15px 10px -15px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.feed-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feed-item-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-typewriter);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-ink-faint);
+}
+
+.feed-item-mini .time {
+  font-size: 10px;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.feed-agent-link {
+  color: var(--color-dollar);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.feed-agent-link:hover {
+  background: var(--color-dollar);
+  color: white;
+  text-decoration: none;
+}
+
+.live-dot-pulse { color: #e45d52; animation: blink 1s infinite; margin-left: 5px; }
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.mt-10 { margin-top: 2.5rem; }
+
 
 .eyebrow {
   font-family: var(--font-typewriter);

@@ -174,7 +174,7 @@
           </section>
         </div>
 
-        <!-- Trade History -->
+        <!-- TRADE HISTORY -->
         <section class="history-section full-width">
           <div class="card-header-technical">
             <span class="title">Execution Scuttle History</span>
@@ -225,33 +225,54 @@
           </div>
         </section>
 
-        <!-- Real-Time Feed -->
-        <section class="feed-section full-width">
-          <div class="card-header-technical">
-            <span class="title">Market Feed <span class="live-dot-pulse" v-if="wsConnected">●</span></span>
-          </div>
-          <div class="feed-container-terminal">
-            <div v-for="(item, i) in liveFeed" :key="i" class="feed-item-alt" :class="item.type">
-              <span class="feed-time">{{ item.time }}</span>
-              <span class="feed-message">{{ item.message }}</span>
-            </div>
-            <p class="empty" v-if="!liveFeed.length">Awaiting market events...</p>
-          </div>
-        </section>
+        <!-- GLOBAL FEEDS (NEW) -->
+        <div class="global-feeds-preview-container full-width">
+          <div class="dashboard-stack horizontal-flex">
+            <!-- Global Market Feed -->
+            <section class="feed-section flex-1">
+              <div class="card-header-technical">
+                <span class="title">GLOBAL MARKET FEED <span class="live-dot-pulse" v-if="wsConnected">●</span></span>
+              </div>
+              <div class="feed-container-terminal">
+                <div v-for="(item, i) in liveFeed" :key="i" class="feed-item-alt" :class="item.type">
+                  <span class="feed-time">{{ item.time }}</span>
+                  <span class="feed-message">
+                    <template v-if="item.agentId">
+                      <a @click.prevent="goToProfile(item.agentId)" href="#" class="feed-agent-link">{{ item.agentName || 'Agent' }}</a>
+                      {{ item.message.split(item.agentName || 'Agent')[1] || item.message }}
+                    </template>
+                    <template v-else>
+                      {{ item.message }}
+                    </template>
+                  </span>
+                </div>
+                <p class="empty" v-if="!liveFeed.length">Awaiting market events...</p>
+              </div>
+            </section>
 
-        <!-- Crustacean Gossip -->
-        <section class="gossip-section full-width">
-          <div class="card-header-technical">
-            <span class="title">Crustacean Gossip <span class="live-dot-pulse" v-if="gossipConnected">●</span></span>
+            <!-- Global Crustacean Gossip -->
+            <section class="gossip-section flex-1">
+              <div class="card-header-technical">
+                <span class="title">GLOBAL GOSSIP <span class="live-dot-pulse" v-if="gossipConnected">●</span></span>
+              </div>
+              <div class="feed-container-terminal gossip-feed">
+                <div v-for="(item, i) in gossipFeed" :key="i" class="feed-item-alt gossip-item">
+                  <span class="feed-time">{{ item.time }}</span>
+                  <span class="feed-message">
+                    <template v-if="item.agentId">
+                      <a @click.prevent="goToProfile(item.agentId)" href="#" class="feed-agent-link">{{ item.agentName || 'Agent' }}</a>
+                      {{ item.message.split(item.agentName || 'Agent')[1] || item.message }}
+                    </template>
+                    <template v-else>
+                      {{ item.message }}
+                    </template>
+                  </span>
+                </div>
+                <p class="empty" v-if="!gossipFeed.length">No shell-phones ringing yet...</p>
+              </div>
+            </section>
           </div>
-          <div class="feed-container-terminal gossip-feed">
-            <div v-for="(item, i) in gossipFeed" :key="i" class="feed-item-alt gossip-item">
-              <span class="feed-time">{{ item.time }}</span>
-              <span class="feed-message">{{ item.message }}</span>
-            </div>
-            <p class="empty" v-if="!gossipFeed.length">No shell-phones ringing yet...</p>
-          </div>
-        </section>
+        </div>
       </div>
     </div>
   </section>
@@ -421,7 +442,7 @@ function startGossipStream() {
     try {
       const data = JSON.parse(event.data);
       const message = data?.payload?.message || data?.payload?.text || 'Gossip static...';
-      addToGossip(message, data?.created_at);
+      addToGossip(message, data?.created_at, data?.payload);
     } catch (e) {
       console.error(e);
     }
@@ -435,7 +456,7 @@ function startGossipStream() {
         .filter((item) => item?.type === 'gossip')
         .forEach((item) => {
           const message = item?.payload?.message || item?.payload?.text || 'Gossip static...';
-          addToGossip(message, item?.created_at);
+          addToGossip(message, item?.created_at, item?.payload);
         });
     } catch (e) {
       console.error(e);
@@ -459,7 +480,7 @@ function startMarketNewsStream() {
     try {
       const data = JSON.parse(event.data);
       const message = data?.payload?.message || 'Market squawks incoming...';
-      addToFeed('news', message, data?.created_at);
+      addToFeed('news', message, data?.created_at, data?.payload);
     } catch (e) {
       console.error(e);
     }
@@ -473,7 +494,7 @@ function startMarketNewsStream() {
         .filter((item) => item?.type === 'news')
         .forEach((item) => {
           const message = item?.payload?.message || 'Market squawks incoming...';
-          addToFeed('news', message, item?.created_at);
+          addToFeed('news', message, item?.created_at, item?.payload);
         });
     } catch (e) {
       console.error(e);
@@ -493,19 +514,27 @@ function updateVibe() {
   currentVibe.value = lobsterVibes[Math.floor(Math.random() * lobsterVibes.length)];
 }
 
-function addToFeed(type, message, createdAt) {
+function addToFeed(type, message, createdAt, meta) {
   const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false })
-    : new Date().toLocaleTimeString('en-US', { hour12: false });
-  liveFeed.value.unshift({ type, message, time });
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  
+  const agentId = meta?.agent_id || null;
+  const agentName = meta?.agent_name || null;
+
+  liveFeed.value.unshift({ type, message, time, agentId, agentName });
   if (liveFeed.value.length > 30) liveFeed.value.pop();
 }
 
-function addToGossip(message, createdAt) {
+function addToGossip(message, createdAt, meta) {
   const time = createdAt
-    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false })
-    : new Date().toLocaleTimeString('en-US', { hour12: false });
-  gossipFeed.value.unshift({ message, time });
+    ? new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  
+  const agentId = meta?.agent_id || null;
+  const agentName = meta?.agent_name || null;
+
+  gossipFeed.value.unshift({ message, time, agentId, agentName });
   if (gossipFeed.value.length > 30) gossipFeed.value.pop();
 }
 
@@ -887,6 +916,12 @@ watch(
   gap: 20px;
 }
 
+.horizontal-flex {
+  flex-direction: row !important;
+}
+
+.flex-1 { flex: 1; }
+
 /* Table Styles */
 .terminal-table {
   width: 100%;
@@ -941,10 +976,14 @@ watch(
 }
 
 .feed-item-alt {
-  padding: 6px 0;
+  padding: 10px 0;
   border-bottom: 1px dashed #ccc;
   font-family: var(--font-typewriter);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .gossip-feed {
@@ -955,7 +994,24 @@ watch(
   border-bottom: 1px dashed rgba(231, 142, 56, 0.4);
 }
 
-.feed-time { color: #888; margin-right: 15px; }
+.feed-time { 
+  font-size: 11px;
+  color: #888; 
+}
+
+.feed-agent-link {
+  color: var(--color-dollar);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.feed-agent-link:hover {
+  background: var(--color-dollar);
+  color: white;
+  text-decoration: none;
+}
 
 .scuttle-loader { animation: blink 1.5s infinite; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -984,5 +1040,6 @@ watch(
   .mega-agent-name { font-size: 32px; }
   .equity-value { font-size: 28px; }
   .pnl-stats-grid { grid-template-columns: 1fr; gap: 15px; }
+  .horizontal-flex { flex-direction: column !important; }
 }
 </style>

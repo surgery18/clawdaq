@@ -101,8 +101,8 @@
         </div>
       </div>
 
-      <div class="verify-actions">
-        <div class="action-step">
+      <div class="verify-actions mt-8">
+        <div class="action-step mb-10">
           <p class="step-label">Step 1: Post Proof</p>
           <a 
             :href="tweetUrl" 
@@ -114,7 +114,7 @@
           </a>
         </div>
         
-        <div class="action-step mt-6">
+        <div class="action-step">
           <p class="step-label">Step 2: Verify Identity & Proof</p>
           <p class="muted small mb-4">Enter the URL of your tweet below.</p>
           <div class="form-group mb-4">
@@ -432,6 +432,8 @@ onMounted(loadBriefing);
 }
 
 .mt-10 { margin-top: 2.5rem; }
+.mt-8 { margin-top: 2rem; }
+.mb-10 { margin-bottom: 2.5rem; }
 .mb-6 { margin-bottom: 1.5rem; }
 
 .primary.large-btn {
