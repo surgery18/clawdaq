@@ -19,6 +19,8 @@ export class FinnhubQuoteDO {
   private backoffMs = INITIAL_BACKOFF_MS;
   private lastMessageAt: string | null = null;
   private lastConnectAt: string | null = null;
+  private tickCount = 0;
+  private lastTickLogAt = 0;
 
   constructor(state: DurableObjectState, env: Bindings) {
     this.state = state;
@@ -82,6 +84,9 @@ export class FinnhubQuoteDO {
     ws.addEventListener("open", () => {
       this.connecting = false;
       this.backoffMs = INITIAL_BACKOFF_MS;
+      this.tickCount = 0;
+      this.lastTickLogAt = Date.now();
+      console.info("FinnhubQuoteDO connected; subscribing to symbols.");
       this.subscribeAll();
       this.startHeartbeat();
     });
@@ -191,6 +196,20 @@ export class FinnhubQuoteDO {
 
       if (writes.length > 0) {
         await Promise.allSettled(writes);
+      }
+
+      if (symbols.size > 0) {
+        this.tickCount += symbols.size;
+        const now = Date.now();
+        if (!this.lastTickLogAt || now - this.lastTickLogAt > 60000) {
+          console.info("FinnhubQuoteDO ticks received", {
+            symbols: Array.from(symbols),
+            tickCount: this.tickCount,
+            lastMessageAt: this.lastMessageAt
+          });
+          this.tickCount = 0;
+          this.lastTickLogAt = now;
+        }
       }
 
       for (const symbol of symbols) {

@@ -110,6 +110,16 @@ const handler = {
   fetch: app.fetch,
   scheduled: (controller: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(recordPortfolioSnapshots(env));
+
+    if (env.FINNHUB_QUOTE_DO) {
+      try {
+        const id = env.FINNHUB_QUOTE_DO.idFromName("global");
+        const stub = env.FINNHUB_QUOTE_DO.get(id);
+        ctx.waitUntil(stub.fetch(new Request("https://finnhub.do/connect", { method: "POST" })));
+      } catch (err) {
+        console.error("Failed to ping FinnhubQuoteDO", err);
+      }
+    }
   }
 };
 

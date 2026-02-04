@@ -20,6 +20,9 @@
   "observability": {
     "enabled": true
   },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "routes": [
     {
       "custom_domain": true,
