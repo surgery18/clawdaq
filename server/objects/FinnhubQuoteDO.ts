@@ -163,6 +163,7 @@ export class FinnhubQuoteDO {
     if (payload?.type === "trade" && Array.isArray(payload.data)) {
       this.lastMessageAt = new Date().toISOString();
       const writes: Promise<void>[] = [];
+      const symbols = new Set<string>();
 
       for (const trade of payload.data) {
         const symbol = String(trade?.s ?? "").toUpperCase();
@@ -180,6 +181,7 @@ export class FinnhubQuoteDO {
           asOf
         };
 
+        symbols.add(symbol);
         writes.push(
           this.env.CACHE.put(`${QUOTE_CACHE_PREFIX}${symbol}`, JSON.stringify(quote), {
             expirationTtl: 120
@@ -190,6 +192,23 @@ export class FinnhubQuoteDO {
       if (writes.length > 0) {
         await Promise.allSettled(writes);
       }
+
+      for (const symbol of symbols) {
+        this.triggerOrderMatcher(symbol);
+      }
     }
+  }
+
+  private triggerOrderMatcher(symbol: string) {
+    if (!symbol) return;
+    const upper = symbol.toUpperCase();
+    const matcherId = this.env.ORDER_MATCHER_DO.idFromName(upper);
+    const matcherStub = this.env.ORDER_MATCHER_DO.get(matcherId);
+
+    this.state.waitUntil(
+      matcherStub.fetch(new Request(`https://matcher/process?symbol=${upper}`)).catch((err) => {
+        console.error(`Order matcher trigger failed for ${upper}`, err);
+      })
+    );
   }
 }
