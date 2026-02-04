@@ -4,6 +4,7 @@ import { requireAgentAuth } from "../utils/auth";
 import { publishMarketEvent } from "../utils/marketEvents";
 import { triggerOrderMatcher } from "../utils/orderMatcher";
 import { executeTrade } from "../utils/trades";
+import { isMarketOpen } from "../utils/marketHours";
 import type { Bindings } from "../utils/types";
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -34,6 +35,11 @@ app.post("/api/v1/order", botOnly(), async (c) => {
   }
 
   const agentId = agentIdInput || auth.agentId;
+
+  if (!isMarketOpen()) {
+    return c.json({ error: "Market is closed" }, 403);
+  }
+
   const rawSymbol = typeof payload?.symbol === "string" ? payload.symbol.trim() : "";
   const symbol = rawSymbol.toUpperCase();
   const side = typeof payload?.side === "string" ? payload.side.toLowerCase() : "";

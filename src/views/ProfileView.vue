@@ -120,8 +120,8 @@
                   <tr v-for="h in agent.holdings" :key="h.ticker">
                     <td class="symbol">{{ h.ticker }}</td>
                     <td class="text-right font-mono">{{ h.shares }}</td>
-                    <td class="text-right font-mono muted">{{ formatCurrency(h.price) }}</td>
-                    <td class="text-right font-mono highlight">{{ formatCurrency(h.value) }}</td>
+                    <td class="text-right font-mono muted">{{ formatCurrency(h.price, h.ticker) }}</td>
+                    <td class="text-right font-mono highlight">{{ formatCurrency(h.value, h.ticker) }}</td>
                     <td class="text-right font-mono" :class="getHoldingPlClass(h)">
                       {{ getHoldingPl(h) }}
                     </td>
@@ -194,7 +194,7 @@
                   <td class="symbol">{{ t.ticker }}</td>
                   <td><span class="side-tag-alt" :class="t.action.toLowerCase()">{{ t.action.toUpperCase() }}</span></td>
                   <td class="text-right font-mono">{{ t.quantity }}</td>
-                  <td class="text-right font-mono">{{ formatCurrency(t.price) }}</td>
+                  <td class="text-right font-mono">{{ formatCurrency(t.price, t.ticker) }}</td>
                   <td class="text-right font-mono" :class="getPlClass(t)">
                     {{ getPlPercent(t) }}
                   </td>
@@ -317,11 +317,10 @@ function ensureUTC(dateStr) {
 // Computed Properties
 const totalValue = computed(() => {
   if (!agent.value) return 0;
-  // Trust the server's pre-calculated totalValue from the SSE or API
-  if (agent.value.totalValue) return Number(agent.value.totalValue);
-  
-  // Fallback to manual sum if totalValue is missing
-  const holdingsValue = agent.value.holdings.reduce((sum, h) => sum + (Number(h.price) * Number(h.shares)), 0);
+  const holdingsValue = (agent.value.holdings || []).reduce(
+    (sum, h) => sum + (Number(h.price || 0) * Number(h.shares || 0)),
+    0
+  );
   return Number(agent.value.cash || 0) + holdingsValue;
 });
 
@@ -334,16 +333,6 @@ const pnlClass = computed(() => {
   if (returnPct.value > 0) return 'text-success';
   if (returnPct.value < 0) return 'text-danger';
   return '';
-});
-
-const serverTotalValue = computed(() => (agent.value ? Number(agent.value.totalValue ?? 0) : 0));
-const clientTotalValue = computed(() => {
-  if (!agent.value) return 0;
-  const holdingsValue = (agent.value.holdings || []).reduce(
-    (sum, h) => sum + Number(h.price || 0) * Number(h.shares || 0),
-    0
-  );
-  return Number(agent.value.cash || 0) + holdingsValue;
 });
 
 const totalLoss = computed(() => Math.max(0, STARTING_CASH - totalValue.value));
@@ -557,7 +546,15 @@ function getHoldingPlClass(holding) {
   return '';
 }
 
-function formatCurrency(v) {
+function formatCurrency(v, ticker) {
+  if (ticker === 'AITX' || (v > 0 && v < 0.01)) {
+    return new Intl.NumberFormat(undefined, { 
+      style: "currency", 
+      currency: "USD",
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4
+    }).format(v || 0);
+  }
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(v || 0);
 }
 
@@ -618,10 +615,16 @@ watch(
 );
 
 watch(
-  () => [serverTotalValue.value, clientTotalValue.value],
-  ([serverVal, clientVal]) => {
-    if (!agent.value || agent.value.totalValue == null) return;
-    const diff = Math.abs(Number(serverVal) - Number(clientVal));
+  () => totalValue.value,
+  (newVal) => {
+    if (!agent.value) return;
+    const holdingsValue = (agent.value.holdings || []).reduce(
+      (sum, h) => sum + Number(h.price || 0) * Number(h.shares || 0),
+      0
+    );
+    const clientVal = Number(agent.value.cash || 0) + holdingsValue;
+    const serverVal = Number(agent.value.totalValue ?? 0);
+    const diff = Math.abs(serverVal - clientVal);
     if (diff > 0.5) {
       console.warn("P/L sync drift detected", {
         server: serverVal,

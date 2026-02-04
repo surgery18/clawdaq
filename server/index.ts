@@ -42,7 +42,7 @@ const recordPortfolioSnapshots = async (env: Bindings) => {
 };
 
 app.onError((err, c) => {
-  console.error(`[Worker Error] ${err}`);
+  console.error(`[Worker Error]`, err);
   return c.json({ error: "Internal Server Error" }, 500);
 });
 
@@ -111,15 +111,7 @@ const handler = {
   scheduled: (controller: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(recordPortfolioSnapshots(env));
 
-    if (env.FINNHUB_QUOTE_DO) {
-      try {
-        const id = env.FINNHUB_QUOTE_DO.idFromName("global");
-        const stub = env.FINNHUB_QUOTE_DO.get(id);
-        ctx.waitUntil(stub.fetch(new Request("https://finnhub.do/connect", { method: "POST" })));
-      } catch (err) {
-        console.error("Failed to ping FinnhubQuoteDO", err);
-      }
-    }
+    // FinnhubQuoteDO heartbeat handled via Durable Object alarms.
   }
 };
 

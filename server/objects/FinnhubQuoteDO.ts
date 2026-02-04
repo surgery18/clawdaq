@@ -6,15 +6,17 @@ const WS_BASE_URL = "wss://ws.finnhub.io?token=";
 const MAX_BACKOFF_MS = 30000;
 const INITIAL_BACKOFF_MS = 1000;
 const HEARTBEAT_MS = 15000;
+const CONNECT_TIMEOUT_MS = 10000;
 
-const roundPrice = (value: number) => Math.max(0.01, Math.round(value * 100) / 100);
+const roundPrice = (value: number, symbol: string) => {
+  if (symbol === "AITX") return Math.max(0.0001, Math.round(value * 10000) / 10000);
+  return Math.max(0.01, Math.round(value * 100) / 100);
+};
 
 export class FinnhubQuoteDO {
   private state: DurableObjectState;
   private env: Bindings;
   private ws: WebSocket | null = null;
-  private reconnectTimer: number | null = null;
-  private heartbeatTimer: number | null = null;
   private connecting = false;
   private backoffMs = INITIAL_BACKOFF_MS;
   private lastMessageAt: string | null = null;
@@ -31,6 +33,16 @@ export class FinnhubQuoteDO {
     const url = new URL(request.url);
 
     if (url.pathname === "/connect") {
+      console.info("FinnhubQuoteDO /connect requested");
+      const status = await this.ensureConnection();
+      return new Response(JSON.stringify(status), {
+        headers: { "content-type": "application/json; charset=utf-8" }
+      });
+    }
+
+    if (url.pathname === "/reconnect") {
+      console.info("FinnhubQuoteDO /reconnect requested. Forcing fresh connection.");
+      this.handleDisconnect("manual_reset");
       const status = await this.ensureConnection();
       return new Response(JSON.stringify(status), {
         headers: { "content-type": "application/json; charset=utf-8" }
@@ -44,7 +56,8 @@ export class FinnhubQuoteDO {
           connected: this.ws?.readyState === WebSocket.OPEN,
           connecting: this.connecting,
           lastMessageAt: this.lastMessageAt,
-          lastConnectAt: this.lastConnectAt
+          lastConnectAt: this.lastConnectAt,
+          watchlist: WATCHLIST
         }),
         {
           headers: { "content-type": "application/json; charset=utf-8" }
@@ -55,8 +68,21 @@ export class FinnhubQuoteDO {
     return new Response("Not found", { status: 404 });
   }
 
+  async alarm() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "ping" }));
+      this.state.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+      return;
+    }
+
+    if (!this.connecting) {
+      await this.ensureConnection();
+    }
+  }
+
   private async ensureConnection() {
     if (!this.env.FINNHUB_API_KEY) {
+      console.error("FinnhubQuoteDO: FINNHUB_API_KEY is missing in env.");
       return { ok: false, error: "missing FINNHUB_API_KEY" };
     }
 
@@ -65,6 +91,7 @@ export class FinnhubQuoteDO {
     }
 
     if (this.connecting) {
+      console.info("FinnhubQuoteDO: Connection already in progress...");
       return { ok: true, connecting: true };
     }
 
@@ -73,36 +100,52 @@ export class FinnhubQuoteDO {
   }
 
   private async connect() {
-    if (!this.env.FINNHUB_API_KEY) return;
-
     this.connecting = true;
+    console.info("FinnhubQuoteDO: Opening WebSocket to Finnhub...");
     this.lastConnectAt = new Date().toISOString();
 
-    const ws = new WebSocket(`${WS_BASE_URL}${this.env.FINNHUB_API_KEY}`);
-    this.ws = ws;
+    try {
+      const ws = new WebSocket(`${WS_BASE_URL}${this.env.FINNHUB_API_KEY}`);
+      this.ws = ws;
 
-    ws.addEventListener("open", () => {
+      const timeout = setTimeout(() => {
+        if (this.connecting) {
+          console.warn("FinnhubQuoteDO: Connection timed out.");
+          this.handleDisconnect("timeout");
+        }
+      }, CONNECT_TIMEOUT_MS);
+
+      ws.addEventListener("open", () => {
+        clearTimeout(timeout);
+        this.connecting = false;
+        this.backoffMs = INITIAL_BACKOFF_MS;
+        this.tickCount = 0;
+        this.lastTickLogAt = Date.now();
+        console.info("FinnhubQuoteDO: Connected! Subscribing...");
+        this.subscribeAll();
+        this.startHeartbeat();
+      });
+
+      ws.addEventListener("message", (event) => {
+        if (typeof event.data !== "string") return;
+        this.handleMessage(event.data);
+      });
+
+      ws.addEventListener("close", () => {
+        clearTimeout(timeout);
+        this.handleDisconnect("close");
+      });
+
+      ws.addEventListener("error", (e) => {
+        clearTimeout(timeout);
+        console.error("FinnhubQuoteDO WebSocket Error:", e);
+        this.handleDisconnect("error");
+      });
+    } catch (err) {
       this.connecting = false;
-      this.backoffMs = INITIAL_BACKOFF_MS;
-      this.tickCount = 0;
-      this.lastTickLogAt = Date.now();
-      console.info("FinnhubQuoteDO connected; subscribing to symbols.");
-      this.subscribeAll();
-      this.startHeartbeat();
-    });
-
-    ws.addEventListener("message", (event) => {
-      if (typeof event.data !== "string") return;
-      this.handleMessage(event.data);
-    });
-
-    ws.addEventListener("close", () => {
-      this.handleDisconnect("close");
-    });
-
-    ws.addEventListener("error", () => {
-      this.handleDisconnect("error");
-    });
+      console.error("FinnhubQuoteDO setup error:", err);
+      this.scheduleReconnect();
+    }
   }
 
   private subscribeAll() {
@@ -113,25 +156,16 @@ export class FinnhubQuoteDO {
   }
 
   private startHeartbeat() {
-    this.stopHeartbeat();
-    if (!this.ws) return;
-
-    this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: "ping" }));
-      }
-    }, HEARTBEAT_MS) as unknown as number;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.state.storage.setAlarm(Date.now() + HEARTBEAT_MS);
   }
 
   private stopHeartbeat() {
-    if (this.heartbeatTimer !== null) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
+    // Heartbeat handled via alarms; nothing to clear here.
   }
 
   private handleDisconnect(reason: string) {
-    console.warn(`FinnhubQuoteDO disconnected (${reason}).`);
+    console.warn(`FinnhubQuoteDO: Disconnected. Reason: ${reason}`);
     this.connecting = false;
     this.stopHeartbeat();
 
@@ -146,15 +180,11 @@ export class FinnhubQuoteDO {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer !== null) return;
-
     const delay = this.backoffMs;
     this.backoffMs = Math.min(this.backoffMs * 2, MAX_BACKOFF_MS);
 
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      void this.ensureConnection();
-    }, delay) as unknown as number;
+    console.info(`FinnhubQuoteDO: Scheduling reconnect in ${delay}ms...`);
+    this.state.storage.setAlarm(Date.now() + delay);
   }
 
   private async handleMessage(raw: string) {
@@ -181,7 +211,7 @@ export class FinnhubQuoteDO {
 
         const quote = {
           symbol,
-          price: roundPrice(price),
+          price: roundPrice(price, symbol),
           source: "finnhub_ws",
           asOf
         };
@@ -202,7 +232,7 @@ export class FinnhubQuoteDO {
         this.tickCount += symbols.size;
         const now = Date.now();
         if (!this.lastTickLogAt || now - this.lastTickLogAt > 60000) {
-          console.info("FinnhubQuoteDO ticks received", {
+          console.info("FinnhubQuoteDO: Ticks received", {
             symbols: Array.from(symbols),
             tickCount: this.tickCount,
             lastMessageAt: this.lastMessageAt

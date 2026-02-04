@@ -16,7 +16,7 @@ export type MarketQuote = {
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
-const CACHE_TTL_SECONDS = 30; // Reduced from 60 to 30 for fresher prices
+const CACHE_TTL_SECONDS = 60; // Production allows 30, but local dev requires min 60.
 const CACHE_MAX_AGE_SECONDS = 90; // Strict staleness check for cached quotes
 
 const EMERGENCY_OVERRIDES: Record<string, number> = {
@@ -32,7 +32,12 @@ const EMERGENCY_OVERRIDES: Record<string, number> = {
 const toNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 
-const roundPrice = (value: number) => Math.max(0.01, Math.round(value * 100) / 100);
+const roundPrice = (value: number, symbol: string) => {
+  if (symbol === "AITX" || value < 0.01) {
+    return Math.max(0.0001, Math.round(value * 10000) / 10000);
+  }
+  return Math.max(0.01, Math.round(value * 100) / 100);
+};
 
 const isStale = (asOf: string | undefined, maxAgeSeconds: number): boolean => {
   if (!asOf) return true;
@@ -56,7 +61,7 @@ const fetchFromFinnhub = async (
         const providerTimestamp = toNumber(data?.t);
         const asOf = providerTimestamp ? new Date(providerTimestamp * 1000).toISOString() : new Date().toISOString();
         return {
-          price: roundPrice(price),
+          price: roundPrice(price, symbol),
           changePercent: toNumber(data?.dp) || 0, // Percent change
           high: toNumber(data?.h) || undefined,
           low: toNumber(data?.l) || undefined,
@@ -85,7 +90,7 @@ const fetchFromYahoo = async (
     const response = await fetcher(`${YAHOO_ENDPOINT}${encodeURIComponent(symbol)}`, {
       headers: { 
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "ClawdaqMarketSurgeon/1.0 (Mozilla/5.0; CloudflareWorker)"
       }
     });
 
@@ -98,7 +103,7 @@ const fetchFromYahoo = async (
         const providerTimestamp = toNumber(result?.regularMarketTime);
         const asOf = providerTimestamp ? new Date(providerTimestamp * 1000).toISOString() : new Date().toISOString();
         return {
-          price: roundPrice(price),
+          price: roundPrice(price, symbol),
           changePercent: toNumber(result?.regularMarketChangePercent) || 0,
           high: toNumber(result?.regularMarketDayHigh) || undefined,
           low: toNumber(result?.regularMarketDayLow) || undefined,
@@ -141,24 +146,30 @@ export const fetchMarketQuote = async (
         const cachedPrice = toNumber(cached.price);
         const cachedValid = cachedPrice !== null && cachedPrice > 0;
         const cachedPlaceholder = cached.isPlaceholder || cached.source === "placeholder";
-        const overrideMismatch =
-          overridePrice !== undefined &&
-          (cached.source !== "override" || cachedPrice === null || Math.abs(cachedPrice - overridePrice) > 1e-9);
+        
+        // Only consider it a mismatch if the cached source is 'override' but the value changed.
+        // We SHOULD trust 'finnhub', 'yahoo', or 'finnhub_ws' over the hardcoded override.
+        const isOverrideSource = cached.source === "override";
+        const overrideValueMismatch = 
+          isOverrideSource && 
+          overridePrice !== undefined && 
+          Math.abs(cachedPrice! - overridePrice) > 1e-9;
+
         if (
           !options?.forceRefresh &&
           cachedValid &&
           !cachedPlaceholder &&
-          !overrideMismatch &&
+          !overrideValueMismatch &&
           !isStale(cached.asOf, maxAgeSeconds)
         ) {
-          // Return cached quote but don't log to reduce noise unless it's a real issue
+          // Return cached quote
           return {
             ...cached,
-            price: cachedPrice,
+            price: cachedPrice!,
             source: "cache"
           };
         }
-        if (cachedValid && !cachedPlaceholder && !overrideMismatch) {
+        if (cachedValid && !cachedPlaceholder) {
           staleCandidate = cached;
         }
       }
@@ -199,7 +210,7 @@ export const fetchMarketQuote = async (
 
   // 4. Emergency Overrides: Use hardcoded prices for core watchlist symbols
   if (overridePrice !== undefined && overridePrice !== null) {
-    const price = overridePrice < 0.01 ? overridePrice : roundPrice(overridePrice);
+    const price = roundPrice(overridePrice, upper);
     const quote: MarketQuote = {
       symbol: upper,
       price,

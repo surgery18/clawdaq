@@ -95,7 +95,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
         c.env.CACHE,
         c.env.FINNHUB_API_KEY,
         fetch,
-        { forceRefresh: true }
+        { maxAgeSeconds: 15 }
       );
       const price = toNumber(quote.price ?? 0);
       const value = Number((shares * price).toFixed(2));
@@ -187,7 +187,7 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
             c.env.CACHE,
             c.env.FINNHUB_API_KEY,
             fetch,
-            { maxAgeSeconds: 60 }
+            { maxAgeSeconds: 30 } // Use cache if fresh within 30s
           );
           const shares = toNumber(row?.quantity ?? 0);
           const averageCost = toNumber(row?.average_cost ?? 0);
@@ -202,37 +202,51 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
         })
       );
 
-      const holdingsValue = sumHoldingsValue(holdings);
-      const totalValue = toNumber(portfolio?.cash_balance ?? 0) + holdingsValue;
+      const holdingsValue = holdings.reduce((sum, h) => sum + (Number(h.price || 0) * Number(h.shares || 0)), 0);
+      const totalValue = Number(portfolio?.cash_balance ?? 0) + holdingsValue;
 
       return {
-        cash: toNumber(portfolio?.cash_balance ?? 0),
+        cash: Number(portfolio?.cash_balance ?? 0),
         totalValue,
         holdings
       };
     };
 
+    // Keep track of last sent data to avoid redundant writes and stay under limits
+    let lastPulse = "";
+
     // Loop and stream
     while (!stream.aborted && !stream.closed) {
-      const snapshot = await getSnapshot();
+      try {
+        const snapshot = await getSnapshot();
 
-      // Calculate Today Analytics (PNL since market open/start of day)
-      const snapshotStartValue = await getStartOfDaySnapshotValue(c.env.DB, agentId);
-      const prevValue = snapshotStartValue ?? snapshot.totalValue;
-      const pnl24h = snapshot.totalValue - prevValue;
-      const pnlPercent24h = prevValue > 0 ? Number(((pnl24h / prevValue) * 100).toFixed(2)) : 0;
+        // Calculate Today Analytics (PNL since market open/start of day)
+        const snapshotStartValue = await getStartOfDaySnapshotValue(c.env.DB, agentId);
+        const prevValue = snapshotStartValue ?? snapshot.totalValue;
+        const pnl24h = snapshot.totalValue - prevValue;
+        const pnlPercent24h = prevValue > 0 ? Number(((pnl24h / prevValue) * 100).toFixed(2)) : 0;
 
-      await stream.writeSSE({
-        data: JSON.stringify({
+        const pulseData = JSON.stringify({
           ...snapshot,
           pnl_24h: pnl24h,
           pnl_percent_24h: pnlPercent24h
-        }),
-        event: "update",
-        id: Date.now().toString()
-      });
-      // Sleep for 3 seconds between pulses
-      await stream.sleep(3000);
+        });
+
+        // Only write if something changed
+        if (pulseData !== lastPulse) {
+          await stream.writeSSE({
+            data: pulseData,
+            event: "update",
+            id: Date.now().toString()
+          });
+          lastPulse = pulseData;
+        }
+      } catch (err) {
+        console.error("SSE Snapshot Error:", err);
+      }
+      
+      // Sleep for 10 seconds between pulses to stay under sub-request limits
+      await stream.sleep(10000);
     }
   });
 });
@@ -278,7 +292,7 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
         c.env.CACHE,
         c.env.FINNHUB_API_KEY,
         fetch,
-        { forceRefresh: true }
+        { maxAgeSeconds: 60 }
       );
       const price = toNumber(quote.price ?? 0);
       const value = Number((shares * price).toFixed(2));

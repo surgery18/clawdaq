@@ -97,6 +97,14 @@ app.get("/api/v1/market/quote/:symbol", async (c) => {
   return c.json(quote);
 });
 
+app.get("/api/v1/market/status/finnhub", async (c) => {
+  if (!c.env.FINNHUB_QUOTE_DO) return c.json({ error: "DO binding missing" }, 500);
+  const id = c.env.FINNHUB_QUOTE_DO.idFromName("global");
+  const stub = c.env.FINNHUB_QUOTE_DO.get(id);
+  const res = await stub.fetch("https://finnhub.do/status");
+  return res;
+});
+
 app.get("/api/v1/market/news", async (c) => {
   return streamSSE(c, async (stream) => {
     registerMarketStream(NEWS_ROOM, stream);

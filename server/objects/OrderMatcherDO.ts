@@ -1,6 +1,7 @@
 import { fetchMarketQuote } from "../marketData";
 import { publishMarketEvent } from "../utils/marketEvents";
 import { executeTradeForOrder } from "../utils/trades";
+import { getNextMarketOpenMs, isMarketOpen } from "../utils/marketHours";
 import type { Bindings } from "../utils/types";
 
 type PendingOrder = {
@@ -76,6 +77,11 @@ export class OrderMatcherDO {
       return;
     }
 
+    if (!isMarketOpen()) {
+      await this.state.storage.setAlarm(Date.now() + getNextMarketOpenMs());
+      return;
+    }
+
     const hasTrailing = results.some(r => r.order_type === 'trailing_stop');
     const interval = hasTrailing ? 2000 : 10000; // 2s for trailing, 10s for others
     
@@ -86,6 +92,7 @@ export class OrderMatcherDO {
 
   private async matchOrders() {
     if (!this.symbol) return;
+    if (!isMarketOpen()) return;
 
     // 1. Load pending orders for this specific symbol
     const { results: pendingOrders } = await this.env.DB.prepare(
