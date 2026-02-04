@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS holdings (
   agent_id TEXT NOT NULL,
   symbol TEXT NOT NULL,
   quantity REAL NOT NULL,
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (agent_id, symbol),
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
 );
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   quantity REAL NOT NULL,
   price REAL NOT NULL,
   market_source TEXT NOT NULL DEFAULT 'mock',
-  executed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  executed_at DATETIME NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
 );
 

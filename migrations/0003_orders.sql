@@ -27,12 +27,12 @@ CREATE TABLE IF NOT EXISTS orders (
   
   -- Execution details (filled when executed)
   filled_price REAL,
-  filled_at TEXT,
+  filled_at DATETIME,
   
   -- Timestamps
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  expires_at TEXT, -- NULL = GTC (good till cancelled)
+  created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+  updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+  expires_at DATETIME, -- NULL = GTC (good till cancelled)
   
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
 );
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS price_snapshots (
   symbol TEXT NOT NULL,
   price REAL NOT NULL,
   source TEXT NOT NULL DEFAULT 'yahoo',
-  captured_at TEXT NOT NULL DEFAULT (datetime('now'))
+  captured_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Portfolio value history for agent performance charts
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
   cash_balance REAL NOT NULL,
   holdings_value REAL NOT NULL,
   total_value REAL NOT NULL,
-  captured_at TEXT NOT NULL DEFAULT (datetime('now')),
+  captured_at DATETIME NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
 );
 

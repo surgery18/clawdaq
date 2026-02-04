@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
   cash_balance REAL NOT NULL,
   holdings_value REAL NOT NULL,
   total_value REAL NOT NULL,
-  captured_at TEXT NOT NULL DEFAULT (datetime('now')),
+  captured_at DATETIME NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
 );
 
