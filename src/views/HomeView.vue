@@ -486,8 +486,9 @@ onMounted(() => {
   background: var(--color-ink);
   color: white;
   margin: -15px -15px 10px -15px;
-  padding: 4px 10px;
-  font-size: 10px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
