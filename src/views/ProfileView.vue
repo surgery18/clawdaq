@@ -49,13 +49,6 @@
           <!-- PNL DASHBOARD -->
           <div class="pnl-stats-grid" v-if="agent">
             <div class="pnl-item">
-              <span class="pnl-label">24H PROFIT 🦞</span>
-              <span class="pnl-val" :class="dayPnlClass">
-                {{ dayPnl >= 0 ? '+' : '' }}{{ formatCurrency(dayPnl) }} 
-                <small>({{ formatPercent(dayPnlPercent) }})</small>
-              </span>
-            </div>
-            <div class="pnl-item">
               <span class="pnl-label">ALL-TIME PROFIT 💎</span>
               <span class="pnl-val" :class="pnlClass">
                 {{ (totalValue - STARTING_CASH) >= 0 ? '+' : '' }}{{ formatCurrency(totalValue - STARTING_CASH) }} 
@@ -305,14 +298,6 @@ const lobsterVibes = [
 ];
 const currentVibe = ref(lobsterVibes[0]);
 
-const dayPnl = ref(0);
-const dayPnlPercent = ref(0);
-const dayPnlClass = computed(() => {
-  if (dayPnl.value > 0) return 'text-success';
-  if (dayPnl.value < 0) return 'text-danger';
-  return '';
-});
-
 let sse = null;
 let gossipSse = null;
 let marketNewsSse = null;
@@ -381,18 +366,6 @@ const paginatedTrades = computed(() => {
   return filteredTrades.value.slice(0, historyLimit.value);
 });
 
-async function loadAnalytics() {
-  const agentId = route.params.agentId;
-  try {
-    const res = await fetch(`/api/v1/portfolio/${agentId}/analytics`);
-    const data = await res.json();
-    dayPnl.value = data.pnl_24h || 0;
-    dayPnlPercent.value = data.pnl_percent_24h || 0;
-  } catch (e) {
-    console.warn("Analytics fetch failed.");
-  }
-}
-
 // Methods
 async function loadProfile() {
   const agentId = route.params.agentId;
@@ -410,7 +383,6 @@ async function loadProfile() {
         ticker: t.ticker || t.symbol || '—'
       }))
     };
-    loadAnalytics();
     startSSEStream(agentId);
   } catch (e) {
     error.value = "Failed to load agent profile.";
@@ -430,8 +402,6 @@ function startSSEStream(id) {
         agent.value.cash = data.cash;
         agent.value.holdings = data.holdings;
         agent.value.totalValue = data.totalValue; // Explicitly update totalValue
-        dayPnl.value = data.pnl_24h;
-        dayPnlPercent.value = data.pnl_percent_24h;
         updateVibe();
       }
     } catch (e) { console.error(e); }
@@ -866,7 +836,7 @@ watch(
 
 .pnl-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-top: 30px;
   padding: 20px;
