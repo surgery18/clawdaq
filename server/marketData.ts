@@ -30,7 +30,7 @@ const mockPrice = (symbol: string) => {
   
   // Real-World Overrides for Scott's Watchlist
   const overrides: Record<string, number> = {
-    "RUM": 5.52,
+    "RUM": 5.67,
     "TIRX": 0.09,
     "AITX": 0.0006,
     "FAT": 0.29,
