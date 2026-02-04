@@ -130,6 +130,7 @@ export const fetchMarketQuote = async (
 ): Promise<MarketQuote> => {
   const upper = symbol.toUpperCase();
   const maxAgeSeconds = options?.maxAgeSeconds ?? CACHE_MAX_AGE_SECONDS;
+  const overridePrice = EMERGENCY_OVERRIDES[upper];
   let staleCandidate: MarketQuote | null = null;
 
   // 1. Check KV Cache first
@@ -140,7 +141,16 @@ export const fetchMarketQuote = async (
         const cachedPrice = toNumber(cached.price);
         const cachedValid = cachedPrice !== null && cachedPrice > 0;
         const cachedPlaceholder = cached.isPlaceholder || cached.source === "placeholder";
-        if (!options?.forceRefresh && cachedValid && !cachedPlaceholder && !isStale(cached.asOf, maxAgeSeconds)) {
+        const overrideMismatch =
+          overridePrice !== undefined &&
+          (cached.source !== "override" || cachedPrice === null || Math.abs(cachedPrice - overridePrice) > 1e-9);
+        if (
+          !options?.forceRefresh &&
+          cachedValid &&
+          !cachedPlaceholder &&
+          !overrideMismatch &&
+          !isStale(cached.asOf, maxAgeSeconds)
+        ) {
           // Return cached quote but don't log to reduce noise unless it's a real issue
           return {
             ...cached,
@@ -148,7 +158,7 @@ export const fetchMarketQuote = async (
             source: "cache"
           };
         }
-        if (cachedValid && !cachedPlaceholder) {
+        if (cachedValid && !cachedPlaceholder && !overrideMismatch) {
           staleCandidate = cached;
         }
       }
@@ -188,7 +198,6 @@ export const fetchMarketQuote = async (
   }
 
   // 4. Emergency Overrides: Use hardcoded prices for core watchlist symbols
-  const overridePrice = EMERGENCY_OVERRIDES[upper];
   if (overridePrice !== undefined && overridePrice !== null) {
     const price = overridePrice < 0.01 ? overridePrice : roundPrice(overridePrice);
     const quote: MarketQuote = {
