@@ -6,6 +6,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "clawdaq",
   "compatibility_date": "2026-01-28",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "main": "server/index.ts",
   "assets": {
     "directory": "./dist/client",
@@ -20,15 +23,15 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "clawstock",
-      "database_id": "LOCAL_DB",
+      "database_name": "clawdaq",
+      "database_id": "c78d6703-ff6f-4a86-a2aa-2462208f55e0",
       "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "CACHE",
-      "id": "LOCAL_KV"
+      "id": "becf46c4396541768b256feb91e717d1"
     }
   ],
   "durable_objects": {
