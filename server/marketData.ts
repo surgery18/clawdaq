@@ -16,18 +16,10 @@ export type MarketQuote = {
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
-const CACHE_TTL_SECONDS = 60; // Production allows 30, but local dev requires min 60.
+const CACHE_TTL_SECONDS = 30; // Production allows 30, but local dev requires min 60.
 const CACHE_MAX_AGE_SECONDS = 90; // Strict staleness check for cached quotes
 
-const EMERGENCY_OVERRIDES: Record<string, number> = {
-  RUM: 5.67,
-  TIRX: 0.09,
-  AITX: 0.0006,
-  FAT: 0.29,
-  DJT: 12.21,
-  AAPL: 180.0,
-  TSLA: 240.0
-};
+const EMERGENCY_OVERRIDES: Record<string, number> = {};
 
 const toNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -88,7 +80,7 @@ const fetchFromYahoo = async (
 ): Promise<Partial<MarketQuote> | null> => {
   try {
     const response = await fetcher(`${YAHOO_ENDPOINT}${encodeURIComponent(symbol)}`, {
-      headers: { 
+      headers: {
         "Accept": "application/json",
         "User-Agent": "ClawdaqMarketSurgeon/1.0 (Mozilla/5.0; CloudflareWorker)"
       }
@@ -115,7 +107,7 @@ const fetchFromYahoo = async (
       }
       console.warn(`Yahoo response missing price for ${symbol}: ${JSON.stringify(payload)?.slice(0, 200)}`);
     } else if (response.status === 429) {
-       console.warn(`Yahoo rate limited (429) for ${symbol}.`);
+      console.warn(`Yahoo rate limited (429) for ${symbol}.`);
     } else {
       const bodyText = await response.text().catch(() => "");
       console.warn(`Yahoo response ${response.status} for ${symbol}: ${bodyText.slice(0, 200)}`);
@@ -146,13 +138,13 @@ export const fetchMarketQuote = async (
         const cachedPrice = toNumber(cached.price);
         const cachedValid = cachedPrice !== null && cachedPrice > 0;
         const cachedPlaceholder = cached.isPlaceholder || cached.source === "placeholder";
-        
+
         // Only consider it a mismatch if the cached source is 'override' but the value changed.
         // We SHOULD trust 'finnhub' or 'yahoo' over the hardcoded override.
         const isOverrideSource = cached.source === "override";
-        const overrideValueMismatch = 
-          isOverrideSource && 
-          overridePrice !== undefined && 
+        const overrideValueMismatch =
+          isOverrideSource &&
+          overridePrice !== undefined &&
           Math.abs(cachedPrice! - overridePrice) > 1e-9;
 
         if (
@@ -239,5 +231,48 @@ export const fetchMarketQuote = async (
     source: "placeholder",
     asOf: new Date().toISOString(),
     isPlaceholder: true
+  };
+};
+
+/**
+ * Syncs the market pulse by fetching fresh quotes for the core watchlist.
+ * Replaces the Durable Object background loop with a simple function that can be called 
+ * via CRON or on-demand without persistent WebSocket connections.
+ */
+export const syncMarketPulse = async (
+  db: D1Database,
+  cache: KVNamespace,
+  finnhubKey: string,
+  fetcher: typeof fetch = fetch
+) => {
+  // Get all unique symbols currently held in portfolios or appearing in pending orders
+  const { results: symbolsRow } = await db.prepare(`
+    SELECT DISTINCT symbol FROM holdings
+    UNION
+    SELECT DISTINCT symbol FROM orders WHERE status = 'pending'
+  `).all();
+
+  const symbols = (symbolsRow ?? []).map((row) => String(row.symbol).toUpperCase());
+
+  const allSymbols = Array.from(new Set(symbols));
+
+  const results = await Promise.all(
+    allSymbols.map(async (symbol) => {
+      try {
+        // Force refresh to get fresh data from APIs
+        const quote = await fetchMarketQuote(symbol, cache, finnhubKey, fetcher, {
+          forceRefresh: true
+        });
+        return { symbol, price: quote.price, source: quote.source };
+      } catch (err) {
+        console.error(`Pulse sync failed for ${symbol}:`, err);
+        return { symbol, error: String(err) };
+      }
+    })
+  );
+
+  return {
+    timestamp: new Date().toISOString(),
+    results
   };
 };

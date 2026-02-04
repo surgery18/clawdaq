@@ -1,9 +1,5 @@
 import { Hono } from "hono";
-import agentRoutes from "./routes/agent";
-import marketRoutes from "./routes/market";
-import orderRoutes from "./routes/order";
-import portfolioRoutes from "./routes/portfolio";
-import gossipRoutes from "./routes/gossip";
+import { fetchMarketQuote, syncMarketPulse } from "./marketData";
 import { runGlobalRecoverySweep } from "./utils/recovery";
 import type { Bindings } from "./utils/types";
 
@@ -109,8 +105,8 @@ const handler = {
   fetch: app.fetch,
   scheduled: (controller: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
     ctx.waitUntil(recordPortfolioSnapshots(env));
-
-    // FinnhubQuoteDO heartbeat handled via Durable Object alarms.
+    // Removed syncMarketPulse from cron to avoid updating prices when no one is watching.
+    // Prices are now updated on-demand when agents or humans fetch quotes/portfolios.
   }
 };
 

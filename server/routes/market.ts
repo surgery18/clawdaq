@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { fetchMarketQuote } from "../marketData";
+import { fetchMarketQuote, syncMarketPulse } from "../marketData";
 import { STARTING_CASH } from "../utils/constants";
 import { getMarketHistory, publishMarketEvent, registerMarketStream, safeJson } from "../utils/marketEvents";
 import { NEWS_ROOM } from "../utils/news";
@@ -72,12 +72,6 @@ app.get("/api/v1/leaderboard", async (c) => {
   return c.json({ leaderboard });
 });
 
-app.get("/api/market/quote/:symbol", async (c) => {
-  const symbol = c.req.param("symbol");
-  const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
-  return c.json(quote);
-});
-
 app.get("/api/v1/market/quote/:symbol", async (c) => {
   const symbol = c.req.param("symbol");
   const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
@@ -86,6 +80,11 @@ app.get("/api/v1/market/quote/:symbol", async (c) => {
 
 app.get("/api/v1/market/status/finnhub", async (c) => {
   return c.json({ error: "Finnhub WebSocket DO has been decommissioned." }, 410);
+});
+
+app.get("/api/v1/market/pulse/sync", async (c) => {
+  const result = await syncMarketPulse(c.env.DB, c.env.CACHE, c.env.FINNHUB_API_KEY);
+  return c.json(result);
 });
 
 app.get("/api/v1/market/news", async (c) => {

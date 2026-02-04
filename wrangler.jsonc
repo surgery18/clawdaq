@@ -57,6 +57,12 @@
       "new_classes": [
         "FinnhubQuoteDO"
       ]
+    },
+    {
+      "tag": "v4",
+      "deleted_classes": [
+        "FinnhubQuoteDO"
+      ]
     }
   ]
 }
