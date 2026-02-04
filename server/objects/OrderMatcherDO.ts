@@ -95,7 +95,7 @@ export class OrderMatcherDO {
     if (!pendingOrders || pendingOrders.length === 0) return;
 
     // 2. Fetch fresh quote (fetched once per symbol cycle)
-    const quote = await fetchMarketQuote(this.symbol, this.env.CACHE);
+    const quote = await fetchMarketQuote(this.symbol, this.env.CACHE, this.env.FINNHUB_API_KEY);
     const currentPrice = quote.price;
 
     for (const order of pendingOrders) {

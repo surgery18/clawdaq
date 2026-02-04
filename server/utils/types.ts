@@ -5,6 +5,7 @@ export type Bindings = {
   ASSETS: Fetcher;
   BASE_URL?: string;
   BOT_PROOF_SECRET?: string;
+  FINNHUB_API_KEY?: string;
 };
 
 export type MarketEvent = {
