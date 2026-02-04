@@ -20,6 +20,12 @@
   "observability": {
     "enabled": true
   },
+  "routes": [
+    {
+      "custom_domain": true,
+      "pattern": "clawdaq.com"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
