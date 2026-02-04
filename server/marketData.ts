@@ -3,7 +3,7 @@ import type { KVNamespace } from "@cloudflare/workers-types";
 export type MarketQuote = {
   symbol: string;
   price: number;
-  source: "yahoo" | "finnhub" | "mock" | "cache";
+  source: "yahoo" | "finnhub" | "cache" | "stale_cache";
   asOf: string;
   changePercent?: number;
   high?: number;
@@ -53,8 +53,12 @@ const fetchFromFinnhub = async (
           asOf
         };
       }
+      console.warn(`Finnhub response missing price for ${symbol}: ${JSON.stringify(data)?.slice(0, 200)}`);
     } else if (response.status === 429) {
       console.warn(`Finnhub rate limited (429) for ${symbol}.`);
+    } else {
+      const bodyText = await response.text().catch(() => "");
+      console.warn(`Finnhub response ${response.status} for ${symbol}: ${bodyText.slice(0, 200)}`);
     }
   } catch (err) {
     console.error("Finnhub fetch failed:", err);
@@ -93,8 +97,12 @@ const fetchFromYahoo = async (
           asOf
         };
       }
+      console.warn(`Yahoo response missing price for ${symbol}: ${JSON.stringify(payload)?.slice(0, 200)}`);
     } else if (response.status === 429) {
        console.warn(`Yahoo rate limited (429) for ${symbol}.`);
+    } else {
+      const bodyText = await response.text().catch(() => "");
+      console.warn(`Yahoo response ${response.status} for ${symbol}: ${bodyText.slice(0, 200)}`);
     }
   } catch (err) {
     console.error("Yahoo fetch failed:", err);
@@ -111,17 +119,21 @@ export const fetchMarketQuote = async (
 ): Promise<MarketQuote> => {
   const upper = symbol.toUpperCase();
   const maxAgeSeconds = options?.maxAgeSeconds ?? CACHE_MAX_AGE_SECONDS;
+  let staleCandidate: MarketQuote | null = null;
 
-  // 1. Check KV Cache first (unless forced refresh)
-  if (cache && !options?.forceRefresh) {
+  // 1. Check KV Cache first
+  if (cache) {
     try {
       const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
-      if (cached && !isStale(cached.asOf, maxAgeSeconds)) {
-        // Return cached quote but don't log to reduce noise unless it's a real issue
-        return {
-          ...cached,
-          source: "cache"
-        };
+      if (cached) {
+        if (!options?.forceRefresh && !isStale(cached.asOf, maxAgeSeconds)) {
+          // Return cached quote but don't log to reduce noise unless it's a real issue
+          return {
+            ...cached,
+            source: "cache"
+          };
+        }
+        staleCandidate = cached;
       }
     } catch (e) {
       console.error(`KV Cache read failed for ${upper}:`, e);
@@ -158,34 +170,14 @@ export const fetchMarketQuote = async (
     return quote;
   }
 
-  // 4. Last Resort: Real-World Overrides for Scott's Watchlist
-  const overrides: Record<string, number> = {
-    "RUM": 5.67,
-    "TIRX": 0.09,
-    "AITX": 0.0006,
-    "FAT": 0.29,
-    "DJT": 12.21,
-    "ASST": 0.82,
-    "LOB": 35.21,
-    "AAPL": 180.00,
-    "TSLA": 240.00
-  };
-
-  const overridePrice = overrides[upper];
-  if (overridePrice !== undefined) {
-    const mockQuote: MarketQuote = {
-      symbol: upper,
-      price: overridePrice,
-      changePercent: 0,
-      source: "mock",
-      asOf: new Date().toISOString()
+  // 4. Last Resort: Return stale cache (if available) so UI can indicate staleness
+  if (staleCandidate) {
+    return {
+      ...staleCandidate,
+      source: "stale_cache"
     };
-    if (cache) {
-      await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 60 });
-    }
-    return mockQuote;
   }
 
-  // 5. Final Fallback: Error out if no real data or override can be found
+  // 5. Final Fallback: Error out if no real data or cache can be found
   throw new Error(`Market data currently unavailable for ${upper}. All providers are unresponsive.`);
 };
