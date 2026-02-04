@@ -26,7 +26,7 @@ export const executeTrade = async (c: any, input: any) => {
 
   const currentShares = Number(holding?.quantity ?? 0);
   const currentAverageCost = Number(holding?.average_cost ?? 0);
-  const quote = await fetchMarketQuote(symbol);
+  const quote = await fetchMarketQuote(symbol, c.env.CACHE);
   const price = quote.price;
   const tradeValue = Number((price * quantity).toFixed(6));
 
@@ -51,7 +51,7 @@ export const executeTrade = async (c: any, input: any) => {
     }
   }
 
-  const quoteAfter = await fetchMarketQuote(symbol);
+  const quoteAfter = await fetchMarketQuote(symbol, c.env.CACHE);
   const priceAfter = quoteAfter.price;
   const tradeValueActual = Number((priceAfter * quantity).toFixed(6));
 

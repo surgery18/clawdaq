@@ -1,3 +1,5 @@
+import type { KVNamespace } from "@cloudflare/workers-types";
+
 export type MarketQuote = {
   symbol: string;
   price: number;
@@ -11,6 +13,8 @@ export type MarketQuote = {
 };
 
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
+const QUOTE_CACHE_PREFIX = "quote:v1:";
+const CACHE_TTL_SECONDS = 60;
 
 const toNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -57,12 +61,28 @@ const mockPrice = (symbol: string) => {
 
 export const fetchMarketQuote = async (
   symbol: string,
+  cache?: KVNamespace,
   fetcher: typeof fetch = fetch
 ): Promise<MarketQuote> => {
   const upper = symbol.toUpperCase();
   const asOf = new Date().toISOString();
 
-  // Try real Yahoo data first with a fake User-Agent to avoid immediate blocking
+  // 1. Check KV Cache first
+  if (cache) {
+    try {
+      const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
+      if (cached) {
+        return {
+          ...cached,
+          source: "cache"
+        };
+      }
+    } catch (e) {
+      console.error(`KV Cache read failed for ${upper}:`, e);
+    }
+  }
+
+  // 2. Try real Yahoo data
   try {
     const response = await fetcher(`${YAHOO_ENDPOINT}${encodeURIComponent(upper)}`, {
       headers: { 
@@ -77,7 +97,7 @@ export const fetchMarketQuote = async (
       const price = toNumber(result?.regularMarketPrice);
 
       if (price !== null) {
-        return {
+        const quote: MarketQuote = {
           symbol: upper,
           price: roundPrice(price),
           source: "yahoo",
@@ -88,6 +108,13 @@ export const fetchMarketQuote = async (
           volume: toNumber(result?.regularMarketVolume) || undefined,
           marketCap: toNumber(result?.marketCap) || undefined
         };
+
+        // Store in cache for next time
+        if (cache) {
+          await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(quote), { expirationTtl: CACHE_TTL_SECONDS });
+        }
+
+        return quote;
       }
     } else if (response.status === 429) {
        console.warn(`Yahoo rate limited (429) for ${upper}. Falling back to mocks.`);
@@ -96,9 +123,9 @@ export const fetchMarketQuote = async (
     console.error("Yahoo fetch failed, using overrides/mock:", err);
   }
 
-  // Fallback to mock price.
+  // 3. Fallback to mock price.
   const mock = mockPrice(upper);
-  return {
+  const mockQuote: MarketQuote = {
     symbol: upper,
     price: mock.price,
     changePercent: mock.changePercent,
@@ -109,4 +136,11 @@ export const fetchMarketQuote = async (
     source: "mock",
     asOf
   };
+
+  // We don't necessarily want to cache mock data for a long time, but let's do 10s to reduce burst overhead
+  if (cache) {
+    await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 10 });
+  }
+
+  return mockQuote;
 };
