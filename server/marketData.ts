@@ -189,9 +189,10 @@ export const fetchMarketQuote = async (
   // 4. Emergency Overrides: Use hardcoded prices for core watchlist symbols
   const overridePrice = EMERGENCY_OVERRIDES[upper];
   if (overridePrice !== undefined && overridePrice !== null) {
+    const price = overridePrice < 0.01 ? overridePrice : roundPrice(overridePrice);
     const quote: MarketQuote = {
       symbol: upper,
-      price: roundPrice(overridePrice),
+      price,
       changePercent: 0,
       source: "override",
       asOf: new Date().toISOString()
