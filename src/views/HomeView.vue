@@ -290,6 +290,9 @@ onMounted(loadLeaderboard);
   .mega-title {
     font-size: 48px;
   }
+  .lede.large {
+    font-size: 20px;
+  }
   .actions.centered {
     flex-direction: column;
     width: 100%;
@@ -297,7 +300,19 @@ onMounted(loadLeaderboard);
   }
   .actions button {
     width: 100%;
-    margin-left: 0 !important;
+    margin: 0 !important;
+  }
+  .join-arena {
+    padding: 20px;
+    box-shadow: 5px 5px 0px var(--color-ink);
+  }
+  .moltbook-card {
+    padding: 15px;
+  }
+  .moltbook-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 }
 

@@ -2,6 +2,7 @@ import { fetchMarketQuote } from "../marketData";
 import { publishMarketEvent } from "./marketEvents";
 import { maybePublishTradeGossip } from "./gossip";
 import { maybePublishLiquidationNews } from "./news";
+import { publishMarketNews } from "./news";
 import type { Bindings } from "./types";
 
 export const executeTrade = async (c: any, input: any) => {
@@ -66,20 +67,7 @@ export const executeTrade = async (c: any, input: any) => {
       ? currentAverageCost
       : 0;
 
-  // Recalculate equity: newCash + holdings_value
-  // Since we don't have all holdings prices here easily, we'll use a simplified equity update
-  // or just rely on the next snapshot. 
-  // Let's at least update it with the known cash delta.
-  const newEquity = Number(
-    (
-      Number(portfolio.equity as number) +
-      (action === "buy" ? 0 : tradeValueActual - (currentShares > 0 ? tradeValueActual : 0))
-    ).toFixed(6)
-  );
-  // Actually, equity = cash + sum(shares * price). 
-  // If we buy, cash decreases, holdings increase by same amount. Equity unchanged (initially).
-  // If we sell, cash increases, holdings decrease. Equity unchanged (at current price).
-  const equity = portfolio.equity;
+  const finalEquity = portfolio.equity;
 
   const statements = [];
 
@@ -114,7 +102,6 @@ export const executeTrade = async (c: any, input: any) => {
         "UPDATE holdings SET quantity = quantity - ?, average_cost = CASE WHEN quantity - ? <= 0 THEN 0 ELSE average_cost END, updated_at = datetime('now') WHERE agent_id = ? AND symbol = ? AND quantity >= ?"
       ).bind(quantity, quantity, agentId, symbol, quantity)
     );
-    // Cleanup zero holdings (optional, but good for tidiness)
     statements.push(
       c.env.DB.prepare("DELETE FROM holdings WHERE agent_id = ? AND symbol = ? AND quantity <= 0").bind(
         agentId,
@@ -129,32 +116,14 @@ export const executeTrade = async (c: any, input: any) => {
     ).bind(agentId, symbol, action, quantity, priceAfter, quoteAfter.source, input.reasoning ?? null)
   );
 
-  // statements update holdings and cash_balance here
-
   const results = await c.env.DB.batch(statements);
 
-  // Check if the portfolio update actually changed a row. If not, the condition (cash_balance >= ?) failed.
   if (action === "buy" && results[0]?.meta?.changes === 0) {
     return { ok: false, status: 400, error: "insufficient cash (concurrency limit hit)" };
   }
   if (action === "sell" && results[1]?.meta?.changes === 0) {
     return { ok: false, status: 400, error: "insufficient shares (concurrency limit hit)" };
   }
-
-  // RECALCULATE EQUITY AFTER TRADE
-  const holdingsRows = await c.env.DB.prepare(
-    "SELECT symbol, quantity FROM holdings WHERE agent_id = ?"
-  ).bind(agentId).all();
-
-  const holdingPromises = (holdingsRows.results || []).map(async (h: any) => {
-    const q = await fetchMarketQuote(h.symbol);
-    return Number(h.quantity) * q.price;
-  });
-
-  const holdingsValues = await Promise.all(holdingPromises);
-  const holdingsValueActual = holdingsValues.reduce((a, b) => a + b, 0);
-
-  const finalEquity = newCash + holdingsValueActual;
 
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?").bind(
@@ -193,6 +162,24 @@ export const executeTrade = async (c: any, input: any) => {
     price: priceAfter,
     tradeValue: tradeValueActual
   });
+
+  // NEWS: Basic trade announcement for the Market Feed
+  try {
+    const tradeAction = action === "buy" ? "purchased" : "liquidated";
+    const tradeEmoji = action === "buy" ? "🛒" : "📉";
+    const agent = (await c.env.DB.prepare("SELECT name FROM agents WHERE id = ?").bind(agentId).first()) as any;
+    const agentName = agent?.name || "Unknown Agent";
+    
+    await publishMarketNews(c.env, `${tradeEmoji} MARKET NEWS: ${agentName} just ${tradeAction} ${quantity} ${symbol} at $${priceAfter.toFixed(2)}.`, {
+      agent_id: agentId,
+      symbol,
+      action,
+      quantity,
+      price: priceAfter
+    });
+  } catch (e) {
+    console.error("Failed to publish trade news:", e);
+  }
 
   return {
     ok: true,
@@ -301,7 +288,6 @@ export async function executeTradeForOrder(
         "UPDATE holdings SET quantity = quantity - ?, average_cost = CASE WHEN quantity - ? <= 0 THEN 0 ELSE average_cost END, updated_at = datetime('now') WHERE agent_id = ? AND symbol = ? AND quantity >= ?"
       ).bind(quantity, quantity, agentId, symbol, quantity)
     );
-    // Cleanup zero holdings
     statements.push(
       env.DB.prepare("DELETE FROM holdings WHERE agent_id = ? AND symbol = ? AND quantity <= 0").bind(
         agentId,
@@ -325,19 +311,7 @@ export async function executeTradeForOrder(
     return { ok: false, error: "insufficient shares" };
   }
 
-  // Recalculate Equity
-  const holdingsRows = await env.DB.prepare(
-    "SELECT symbol, quantity FROM holdings WHERE agent_id = ?"
-  ).bind(agentId).all();
-
-  const holdingPromises = (holdingsRows.results || []).map(async (h: any) => {
-    const q = await fetchMarketQuote(h.symbol);
-    return Number(h.quantity) * q.price;
-  });
-
-  const holdingsValues = await Promise.all(holdingPromises);
-  const holdingsValueActual = holdingsValues.reduce((a, b) => a + b, 0);
-  const finalEquity = newCash + holdingsValueActual;
+  const finalEquity = portfolio.equity;
 
   await env.DB.batch([
     env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?").bind(
@@ -367,6 +341,24 @@ export async function executeTradeForOrder(
     price,
     tradeValue
   });
+
+  // NEWS: Basic trade announcement for the Market Feed (Filled Orders)
+  try {
+    const orderAction = action === "buy" ? "purchased" : "liquidated";
+    const orderEmoji = action === "buy" ? "🛒" : "📉";
+    const agent = (await env.DB.prepare("SELECT name FROM agents WHERE id = ?").bind(agentId).first()) as any;
+    const agentName = agent?.name || "Unknown Agent";
+    
+    await publishMarketNews(env, `${orderEmoji} MARKET NEWS: ${agentName} just ${orderAction} ${quantity} ${symbol} at $${price.toFixed(2)}.`, {
+      agent_id: agentId,
+      symbol,
+      action,
+      quantity,
+      price
+    });
+  } catch (e) {
+    console.error("Failed to publish order trade news:", e);
+  }
 
   return { ok: true };
 }
