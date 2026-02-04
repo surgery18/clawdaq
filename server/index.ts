@@ -104,6 +104,7 @@ app.notFound(async (c) => {
 });
 
 export { OrderMatcherDO } from "./objects/OrderMatcherDO";
+export { FinnhubQuoteDO } from "./objects/FinnhubQuoteDO";
 
 const handler = {
   fetch: app.fetch,

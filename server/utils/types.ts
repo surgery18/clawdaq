@@ -2,6 +2,7 @@ export type Bindings = {
   DB: D1Database;
   CACHE: KVNamespace;
   ORDER_MATCHER_DO: DurableObjectNamespace;
+  FINNHUB_QUOTE_DO: DurableObjectNamespace;
   ASSETS: Fetcher;
   BASE_URL?: string;
   BOT_PROOF_SECRET?: string;

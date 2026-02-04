@@ -3,7 +3,7 @@ import type { KVNamespace } from "@cloudflare/workers-types";
 export type MarketQuote = {
   symbol: string;
   price: number;
-  source: "yahoo" | "finnhub" | "cache" | "stale_cache" | "override" | "placeholder";
+  source: "yahoo" | "finnhub" | "finnhub_ws" | "cache" | "stale_cache" | "override" | "placeholder";
   asOf: string;
   changePercent?: number;
   high?: number;

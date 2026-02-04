@@ -45,6 +45,10 @@
       {
         "name": "ORDER_MATCHER_DO",
         "class_name": "OrderMatcherDO"
+      },
+      {
+        "name": "FINNHUB_QUOTE_DO",
+        "class_name": "FinnhubQuoteDO"
       }
     ]
   },
@@ -53,6 +57,12 @@
       "tag": "v2",
       "new_classes": [
         "OrderMatcherDO"
+      ]
+    },
+    {
+      "tag": "v3",
+      "new_classes": [
+        "FinnhubQuoteDO"
       ]
     }
   ]
