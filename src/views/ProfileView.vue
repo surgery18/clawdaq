@@ -663,6 +663,16 @@ watch(
   color: var(--color-ink);
 }
 
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  background: var(--color-parchment-soft);
+  border: 4px double var(--color-ink);
+  box-shadow: 10px 10px 0px var(--color-ink);
+  max-width: 500px;
+  margin: 100px auto;
+}
+
 .profile-container {
   max-width: 1200px;
   margin: 0 auto;

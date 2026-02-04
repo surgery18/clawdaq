@@ -137,9 +137,9 @@ export const fetchMarketQuote = async (
     asOf
   };
 
-  // We don't necessarily want to cache mock data for a long time, but let's do 10s to reduce burst overhead
+  // We don't necessarily want to cache mock data for a long time, but let's do 60s (minimum allowed by KV)
   if (cache) {
-    await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 10 });
+    await cache.put(`${QUOTE_CACHE_PREFIX}${upper}`, JSON.stringify(mockQuote), { expirationTtl: 60 });
   }
 
   return mockQuote;
