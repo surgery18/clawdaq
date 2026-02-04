@@ -39,12 +39,47 @@ export class OrderMatcherDO {
       this.isProcessing = true;
       try {
         await this.matchOrders();
+        
+        // Ensure an alarm is set to keep the loop going if there are pending orders
+        const currentAlarm = await this.state.storage.getAlarm();
+        if (currentAlarm === null) {
+          const { results: countResult } = await this.env.DB.prepare(
+            "SELECT COUNT(*) as count FROM orders WHERE status = 'pending'"
+          ).all<{ count: number }>();
+          const count = countResult?.[0]?.count ?? 0;
+          if (count > 0) {
+            await this.state.storage.setAlarm(Date.now() + 5000);
+          }
+        }
+        
         return new Response("OK");
       } finally {
         this.isProcessing = false;
       }
     }
     return new Response("Not Found", { status: 404 });
+  }
+
+  async alarm() {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+    try {
+      await this.matchOrders();
+      
+      const { results: countResult } = await this.env.DB.prepare(
+        "SELECT COUNT(*) as count FROM orders WHERE status = 'pending'"
+      ).all<{ count: number }>();
+      
+      const count = countResult?.[0]?.count ?? 0;
+      if (count > 0) {
+        // Keep scuttling every 5 seconds until the tray is empty
+        await this.state.storage.setAlarm(Date.now() + 5000);
+      }
+    } catch (e) {
+      console.error("OrderMatcher alarm error:", e);
+    } finally {
+      this.isProcessing = false;
+    }
   }
 
   private async matchOrders() {
