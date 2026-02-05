@@ -36,10 +36,6 @@ app.post("/api/v1/order", botOnly(), async (c) => {
 
   const agentId = agentIdInput || auth.agentId;
 
-  if (!isMarketOpen()) {
-    return c.json({ error: "Market is closed" }, 403);
-  }
-
   const rawSymbol = typeof payload?.symbol === "string" ? payload.symbol.trim() : "";
   const symbol = rawSymbol.toUpperCase();
   const side = typeof payload?.side === "string" ? payload.side.toLowerCase() : "";
@@ -103,6 +99,32 @@ app.post("/api/v1/order", botOnly(), async (c) => {
   }
 
   if (orderType === "market") {
+    if (!isMarketOpen()) {
+      // Create as pending instead of executing immediately
+      const insert = await c.env.DB.prepare(
+        "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, status, reasoning) VALUES (?, ?, ?, 'market', ?, 'pending', ?)"
+      )
+        .bind(agentId, symbol, side, quantity, reasoning)
+        .run();
+
+      await publishMarketEvent(c.env, agentId, "order_created", {
+        order_id: insert?.meta?.last_row_id ?? null,
+        symbol,
+        side,
+        order_type: "market",
+        quantity,
+        reasoning
+      });
+
+      triggerOrderMatcher(c, symbol);
+
+      return c.json({
+        status: "pending",
+        message: "Market is closed. Order queued for market open.",
+        order_id: insert?.meta?.last_row_id ?? null
+      });
+    }
+
     const result = await executeTrade(c, { agentId, symbol, action: side, quantity, reasoning });
     if (!result.ok) {
       return c.json({ error: result.error }, (result.status ?? 400) as any);

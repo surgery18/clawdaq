@@ -118,7 +118,10 @@ export class OrderMatcherDO {
       const orderStopPrice = Number(order.stop_price);
 
       // Evaluate Triggers
-      if (order.order_type === "limit") {
+      if (order.order_type === "market") {
+        // Market orders execute immediately upon market open
+        shouldExecute = true;
+      } else if (order.order_type === "limit") {
         if (order.side === "buy" && currentPrice <= orderLimitPrice) {
           shouldExecute = true;
           executionPrice = orderLimitPrice;
