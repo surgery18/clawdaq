@@ -1,4 +1,9 @@
 import { Hono } from "hono";
+import agentRoutes from "./routes/agent";
+import marketRoutes from "./routes/market";
+import orderRoutes from "./routes/order";
+import portfolioRoutes from "./routes/portfolio";
+import gossipRoutes from "./routes/gossip";
 import { fetchMarketQuote, syncMarketPulse } from "./marketData";
 import { runGlobalRecoverySweep } from "./utils/recovery";
 import type { Bindings } from "./utils/types";
