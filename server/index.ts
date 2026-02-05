@@ -32,8 +32,29 @@ const recordPortfolioSnapshots = async (env: Bindings) => {
     if (!agentId) continue;
     const agentName = String(row?.name ?? "Unknown Agent");
     const cash = Number(row?.cash_balance ?? 0);
-    const total = Number(row?.equity ?? 0);
+
+    const holdingsRows = await env.DB.prepare(
+      "SELECT symbol, quantity FROM holdings WHERE agent_id = ?"
+    ).bind(agentId).all();
+
+    let holdingsValueTotal = 0;
+    for (const h of holdingsRows.results || []) {
+      const quote = await fetchMarketQuote(
+        String(h.symbol),
+        env.CACHE,
+        env.FINNHUB_API_KEY,
+        fetch,
+        { forceRefresh: true }
+      );
+      holdingsValueTotal += Number(h.quantity) * (quote.price || 0);
+    }
+
+    const total = Number((cash + holdingsValueTotal).toFixed(6));
     const holdings = Math.max(total - cash, 0);
+
+    // Update the portfolio equity in the main table so it stays fresh
+    await env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?")
+      .bind(total, agentId).run();
     
     // Snapshot statement
     snapshotStatements.push(

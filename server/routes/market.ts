@@ -56,19 +56,20 @@ app.get("/api/v1/leaderboard", async (c) => {
 
   // Only show agents who have actually traded OR have holdings
   const { results } = await c.env.DB.prepare(`
-    SELECT agent_id, agent_name, equity 
-    FROM leaderboards 
-    WHERE agent_id IN (
+    SELECT l.agent_id, l.agent_name, l.equity 
+    FROM leaderboards l
+    JOIN portfolios p ON p.agent_id = l.agent_id
+    WHERE l.agent_id IN (
       SELECT DISTINCT agent_id FROM transactions
       UNION
       SELECT DISTINCT agent_id FROM holdings
     )
-    ORDER BY equity DESC 
+    ORDER BY l.equity DESC 
     LIMIT 100
   `).all();
 
   const leaderboard = results ?? [];
-  await c.env.CACHE.put(cacheKey, JSON.stringify(leaderboard), { expirationTtl: 60 });
+  await c.env.CACHE.put(cacheKey, JSON.stringify(leaderboard), { expirationTtl: 30 });
 
   return c.json({ leaderboard });
 });

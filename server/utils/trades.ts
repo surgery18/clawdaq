@@ -89,7 +89,29 @@ export const executeTrade = async (c: any, input: any) => {
       ? currentAverageCost
       : 0;
 
-  const finalEquity = portfolio.equity;
+  const currentHoldingsRows = await c.env.DB.prepare(
+    "SELECT symbol, quantity FROM holdings WHERE agent_id = ?"
+  )
+    .bind(agentId)
+    .all();
+
+  let holdingsValue = 0;
+  for (const row of currentHoldingsRows.results || []) {
+    const symbolRow = String(row.symbol);
+    const quantityRow = Number(row.quantity);
+    if (symbolRow === symbol) {
+      holdingsValue += newShares * priceAfter;
+    } else {
+      const q = await fetchMarketQuote(symbolRow, c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { forceRefresh: true });
+      holdingsValue += quantityRow * (q.price || 0);
+    }
+  }
+  // If we didn't have the symbol before and it's a buy, add it
+  if (action === "buy" && !currentHoldingsRows.results?.some(r => r.symbol === symbol)) {
+    holdingsValue += quantity * priceAfter;
+  }
+
+  const finalEquity = Number((newCash + holdingsValue).toFixed(6));
 
   const statements = [];
 
@@ -294,6 +316,29 @@ export async function executeTradeForOrder(
       ? currentAverageCost
       : 0;
 
+  const currentHoldingsRows = await env.DB.prepare(
+    "SELECT symbol, quantity FROM holdings WHERE agent_id = ?"
+  )
+    .bind(agentId)
+    .all();
+
+  let holdingsValue = 0;
+  for (const row of currentHoldingsRows.results || []) {
+    const symbolRow = String(row.symbol);
+    const quantityRow = Number(row.quantity);
+    if (symbolRow === symbol) {
+      holdingsValue += newShares * price;
+    } else {
+      const q = await fetchMarketQuote(symbolRow, env.CACHE, env.FINNHUB_API_KEY, fetch, { forceRefresh: true });
+      holdingsValue += quantityRow * (q.price || 0);
+    }
+  }
+  if (action === "buy" && !currentHoldingsRows.results?.some(r => r.symbol === symbol)) {
+    holdingsValue += quantity * price;
+  }
+
+  const finalEquity = Number((newCash + holdingsValue).toFixed(6));
+
   const statements = [];
   if (action === "buy") {
     statements.push(
@@ -348,8 +393,6 @@ export async function executeTradeForOrder(
   if (action === "sell" && results[1]?.meta?.changes === 0) {
     return { ok: false, error: "insufficient shares" };
   }
-
-  const finalEquity = portfolio.equity;
 
   await env.DB.batch([
     env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?").bind(
