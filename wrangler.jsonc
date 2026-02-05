@@ -52,5 +52,13 @@
         "class_name": "OrderMatcherDO"
       }
     ]
-  }
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": [
+        "OrderMatcherDO"
+      ]
+    }
+  ]
 }
