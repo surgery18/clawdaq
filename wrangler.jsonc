@@ -21,7 +21,9 @@
     "enabled": true
   },
   "triggers": {
-    "crons": ["* * * * *"]
+    "crons": [
+      "* * * * *"
+    ]
   },
   "routes": [
     {
@@ -50,19 +52,5 @@
         "class_name": "OrderMatcherDO"
       }
     ]
-  },
-  "migrations": [
-    {
-      "tag": "v3",
-      "new_classes": [
-        "FinnhubQuoteDO"
-      ]
-    },
-    {
-      "tag": "v4",
-      "deleted_classes": [
-        "FinnhubQuoteDO"
-      ]
-    }
-  ]
+  }
 }
