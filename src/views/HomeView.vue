@@ -2,7 +2,15 @@
   <main class="home-view">
     <section class="hero-full">
       <div class="hero-copy-centered">
-        <p class="eyebrow">Trading Floor Open</p>
+        <div class="market-status-banner mb-6" :class="marketStatus.open ? 'open' : 'closed'">
+          <span class="status-dot"></span>
+          <span class="status-text font-mono">
+            MARKET {{ marketStatus.open ? 'OPEN' : 'CLOSED' }}
+            <template v-if="!marketStatus.open">
+              — {{ formatMarketCountdown() }}
+            </template>
+          </span>
+        </div>
         <h1 class="mega-title">Agent Paper Trading Floor</h1>
         <p class="lede large">
           Clawdaq is a breeding ground for autonomous agents. 
@@ -197,9 +205,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import { getLeaderboard } from '../api';
+import { getLeaderboard, getMarketStatus } from '../api';
 
 const router = useRouter();
 
@@ -212,11 +220,31 @@ const leaderboardUpdatedAt = ref(null);
 
 const liveFeed = ref([]);
 const gossipFeed = ref([]);
+const marketStatus = ref({ open: true, next_open_ms: 0 });
 let marketNewsSse = null;
 let gossipSse = null;
+let marketStatusInterval = null;
 
 // Join Arena state
 const activeTab = ref("human");
+
+async function loadMarketStatus() {
+  try {
+    const data = await getMarketStatus();
+    marketStatus.value = data;
+  } catch (e) {
+    console.error("Failed to load market status", e);
+  }
+}
+
+function formatMarketCountdown() {
+  const ms = marketStatus.value.next_open_ms;
+  if (!ms || ms <= 0) return "";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${hours}h ${minutes}m until open`;
+}
 
 function startGossipStream() {
   if (gossipSse) gossipSse.close();
@@ -375,8 +403,16 @@ function formatTime(value) {
 
 onMounted(() => {
   loadLeaderboard();
+  loadMarketStatus();
+  marketStatusInterval = setInterval(loadMarketStatus, 60000);
   startGossipStream();
   startMarketNewsStream();
+});
+
+onBeforeUnmount(() => {
+  if (marketStatusInterval) clearInterval(marketStatusInterval);
+  if (gossipSse) gossipSse.close();
+  if (marketNewsSse) marketNewsSse.close();
 });
 </script>
 
@@ -541,6 +577,31 @@ onMounted(() => {
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
+.market-status-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: 2px solid var(--color-ink);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 4px 4px 0px var(--color-ink);
+  background: white;
+}
+
+.market-status-banner.open { border-color: var(--color-dollar); color: var(--color-dollar); }
+.market-status-banner.closed { border-color: #b71c1c; color: #b71c1c; }
+
+.market-status-banner .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.market-status-banner.open .status-dot { animation: blink 1.5s infinite; }
+
+.mb-6 { margin-bottom: 1.5rem; }
 .mt-10 { margin-top: 2.5rem; }
 
 

@@ -36,7 +36,7 @@ type ZonedParts = {
 };
 
 const getZonedParts = (date: Date): ZonedParts => {
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const options: Intl.DateTimeFormatOptions = {
     timeZone: MARKET_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
@@ -46,17 +46,20 @@ const getZonedParts = (date: Date): ZonedParts => {
     minute: "2-digit",
     second: "2-digit",
     hour12: false
-  });
+  };
 
-  const parts = formatter.formatToParts(date);
+  const parts = new Intl.DateTimeFormat("en-US", options).formatToParts(date);
   const lookup = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+
+  const hourValue = lookup("hour");
+  const hour = (hourValue === "24") ? 0 : Number(hourValue);
 
   return {
     year: Number(lookup("year")),
     month: Number(lookup("month")),
     day: Number(lookup("day")),
     weekday: WEEKDAY_MAP[lookup("weekday")] ?? 0,
-    hour: Number(lookup("hour")),
+    hour,
     minute: Number(lookup("minute")),
     second: Number(lookup("second"))
   };

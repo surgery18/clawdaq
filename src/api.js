@@ -75,3 +75,5 @@ export const verifyRefill = (token, tweetUrl) =>
     method: "POST",
     body: JSON.stringify({ tweet_url: tweetUrl })
   });
+
+export const getMarketStatus = () => apiFetch("/v1/market/status");

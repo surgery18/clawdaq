@@ -17,6 +17,9 @@
         </div>
 
         <div class="agent-main-identity">
+          <div class="market-status-badge-mini mb-4" :class="marketStatus.open ? 'open' : 'closed'">
+            ● MARKET {{ marketStatus.open ? 'OPEN' : 'CLOSED' }}
+          </div>
           <h1 class="mega-agent-name">{{ agent.name }}</h1>
           <div class="agent-sub-info">
             <a 
@@ -57,7 +60,7 @@
             </div>
             <div class="pnl-item">
               <span class="pnl-label">BUYING POWER 💰</span>
-              <span class="pnl-val highlight">{{ formatCurrency(agent.cash) }}</span>
+              <span class="pnl-val highlight">{{ formatCurrency(agent.buyingPower ?? agent.cash) }}</span>
             </div>
           </div>
 
@@ -144,6 +147,8 @@
                 <thead>
                   <tr>
                     <th>Ticker</th>
+                    <th class="text-right">UNITS</th>
+                    <th class="text-right">Value</th>
                     <th>Action</th>
                     <th class="text-right">Trigger</th>
                     <th>Reasoning</th>
@@ -152,6 +157,8 @@
                 <tbody>
                   <tr v-for="o in agent.pendingOrders" :key="o.id">
                     <td class="symbol">{{ o.symbol }}</td>
+                    <td class="text-right font-mono">{{ o.quantity }}</td>
+                    <td class="text-right font-mono highlight">{{ formatCurrency(getOrderValue(o), o.symbol) }}</td>
                     <td><span class="side-tag-alt" :class="o.side.toLowerCase()">{{ o.side.toUpperCase() }}</span></td>
                     <td class="text-right font-mono">{{ formatOrderPrice(o) }}</td>
                     <td>
@@ -159,7 +166,7 @@
                     </td>
                   </tr>
                   <tr v-if="!agent.pendingOrders?.length">
-                    <td colspan="4" class="empty">No pending scuttles</td>
+                    <td colspan="6" class="empty">No pending scuttles</td>
                   </tr>
                 </tbody>
               </table>
@@ -274,7 +281,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getPortfolio } from '../api';
+import { getPortfolio, getMarketStatus } from '../api';
 
 const route = useRoute();
 const router = useRouter();
@@ -290,6 +297,7 @@ const historyFilter = ref("");
 const historyLimit = ref(50);
 const equityDelta = ref(0);
 const equityPulse = ref("");
+const marketStatus = ref({ open: true, next_open_ms: 0 });
 
 const lobsterVibes = [
   'WHOOP! 🦞', 'SCUTTLING... 💨', 'SHELLISHLY RICH 💰', 
@@ -323,6 +331,11 @@ const totalValue = computed(() => {
   );
   return Number(agent.value.cash || 0) + holdingsValue;
 });
+
+function getOrderValue(o) {
+  const price = o.order_type === 'limit' ? (o.limit_price || 0) : (o.price || 0);
+  return o.quantity * price;
+}
 
 const returnPct = computed(() => {
   if (!agent.value) return 0;
@@ -363,7 +376,11 @@ async function loadProfile() {
   if (!agent.value) loading.value = true;
   
   try {
-    const data = await getPortfolio(agentId);
+    const [data, statusData] = await Promise.all([
+      getPortfolio(agentId),
+      getMarketStatus()
+    ]);
+    marketStatus.value = statusData;
     const agentData = data?.agent ?? data;
     agent.value = {
       ...agentData,
@@ -1058,6 +1075,22 @@ watch(
   border: 1px solid var(--color-ink);
   background: white;
 }
+
+.market-status-badge-mini {
+  display: inline-block;
+  font-family: var(--font-typewriter);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border: 1px solid var(--color-ink);
+  box-shadow: 2px 2px 0px var(--color-ink);
+  background: white;
+}
+
+.market-status-badge-mini.open { color: var(--color-dollar); border-color: var(--color-dollar); }
+.market-status-badge-mini.closed { color: #b71c1c; border-color: #b71c1c; }
+
+.mb-4 { margin-bottom: 1rem; }
 
 @media (max-width: 768px) {
   .mega-agent-name { font-size: 32px; }

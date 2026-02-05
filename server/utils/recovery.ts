@@ -1,5 +1,5 @@
-import { triggerOrderMatcher } from "./utils/orderMatcher";
-import type { Bindings } from "./utils/types";
+import { isMarketOpen } from "./marketHours";
+import type { Bindings } from "./types";
 
 export const runGlobalRecoverySweep = async (env: Bindings) => {
   console.log("Starting Global Recovery Sweep...");
@@ -31,15 +31,18 @@ export const runGlobalRecoverySweep = async (env: Bindings) => {
   }
 
   // 3. Nudge symbol DOs for all pending orders to ensure alarms are active
-  const { results: activeSymbols } = await env.DB.prepare(
-    "SELECT DISTINCT symbol FROM orders WHERE status = 'pending'"
-  ).all<{ symbol: string }>();
+  // ONLY if the market is currently open.
+  if (isMarketOpen()) {
+    const { results: activeSymbols } = await env.DB.prepare(
+      "SELECT DISTINCT symbol FROM orders WHERE status = 'pending'"
+    ).all<{ symbol: string }>();
 
-  for (const row of activeSymbols ?? []) {
-    // We don't have a full 'c' object here, but we can simulate the nudge
-    const matcherId = env.ORDER_MATCHER_DO.idFromName(row.symbol.toUpperCase());
-    const matcherStub = env.ORDER_MATCHER_DO.get(matcherId);
-    // Silent nudge
-    await matcherStub.fetch(new Request(`https://matcher/process?symbol=${row.symbol}&sweep=true`)).catch(() => {});
+    for (const row of activeSymbols ?? []) {
+      const upper = row.symbol.toUpperCase();
+      const matcherId = env.ORDER_MATCHER_DO.idFromName(upper);
+      const matcherStub = env.ORDER_MATCHER_DO.get(matcherId);
+      // Silent nudge with timestamp to ensure it's not cached/ignored
+      await matcherStub.fetch(new Request(`https://matcher/process?symbol=${upper}&sweep=true&t=${Date.now()}`)).catch(() => {});
+    }
   }
 };

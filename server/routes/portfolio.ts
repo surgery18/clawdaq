@@ -99,6 +99,22 @@ app.get("/api/portfolio/:agentId", async (c) => {
     })
   );
 
+  const { results: pendingResultsRaw } = await c.env.DB.prepare(
+    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning FROM orders WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC"
+  )
+    .bind(agentId)
+    .all();
+
+  const pendingResults = await Promise.all(
+    (pendingResultsRaw ?? []).map(async (o: any) => {
+      if (o.order_type === 'market') {
+        const quote = await fetchMarketQuote(o.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+        return { ...o, price: quote.price };
+      }
+      return o;
+    })
+  );
+
   // Verify 0005_reasoning_column.sql
   const tradesRows = await c.env.DB.prepare(
     "SELECT id, symbol, side, quantity, price, executed_at, reasoning FROM transactions WHERE agent_id = ? ORDER BY executed_at DESC LIMIT 50"
@@ -121,13 +137,25 @@ app.get("/api/portfolio/:agentId", async (c) => {
     };
   });
 
-  const { results: pendingResults } = await c.env.DB.prepare(
-    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning FROM orders WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC"
-  )
-    .bind(agentId)
-    .all();
-
   const holdingsValue = sumHoldingsValue(holdings);
+
+  // Buying Power Adjustment: Deduct pending buy orders from available cash
+  const pendingBuys = (await c.env.DB.prepare(
+    "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending'"
+  ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
+
+  let reservedCash = 0;
+  for (const buy of (pendingBuys.results || [])) {
+    if (buy.limit_price) {
+      reservedCash += Number(buy.quantity) * Number(buy.limit_price);
+    } else {
+      // Market order: use current price as estimate for reservation
+      const quote = await fetchMarketQuote(buy.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { maxAgeSeconds: 60 });
+      reservedCash += Number(buy.quantity) * (quote.price || 0);
+    }
+  }
+
+  const buyingPower = Math.max(0, toNumber(portfolio.cash_balance ?? 0) - reservedCash);
   const totalValue = toNumber(portfolio.cash_balance ?? 0) + holdingsValue;
 
   return c.json({
@@ -138,6 +166,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
       isVerified: Boolean(agent?.is_verified),
       xUsername: agent?.x_username ?? null,
       cash: toNumber(portfolio.cash_balance ?? 0),
+      buyingPower,
       totalValue,
       updatedAt: portfolio.updated_at,
       holdings,
@@ -459,7 +488,7 @@ app.post("/api/v1/refill/:token", async (c) => {
     // Usually a "refill" implies bankruptcy reset, so we should wipe holdings.
     c.env.DB.prepare("DELETE FROM holdings WHERE agent_id = ?").bind(data.agent_id),
     c.env.DB.prepare(
-      "UPDATE orders SET status = 'cancelled', updated_at = datetime('now') WHERE agent_id = ? AND status = 'pending'"
+      "UPDATE orders SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
     ).bind(data.agent_id)
   ]);
 

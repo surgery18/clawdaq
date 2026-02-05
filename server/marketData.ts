@@ -16,7 +16,7 @@ export type MarketQuote = {
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
-const CACHE_TTL_SECONDS = 30; // Production allows 30, but local dev requires min 60.
+const CACHE_TTL_SECONDS = 60; // Production allows 30, but local dev requires min 60.
 const CACHE_MAX_AGE_SECONDS = 90; // Strict staleness check for cached quotes
 
 const EMERGENCY_OVERRIDES: Record<string, number> = {};

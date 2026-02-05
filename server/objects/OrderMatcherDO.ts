@@ -54,13 +54,19 @@ export class OrderMatcherDO {
   }
 
   async alarm() {
-    if (this.isProcessing) return;
+    if (this.isProcessing) {
+      // If busy, reschedule briefly
+      await this.state.storage.setAlarm(Date.now() + 2000);
+      return;
+    }
     this.isProcessing = true;
     try {
       await this.matchOrders();
       await this.manageAlarm();
     } catch (e) {
       console.error(`OrderMatcher alarm error [${this.symbol}]:`, e);
+      // Reschedule on error
+      await this.state.storage.setAlarm(Date.now() + 5000);
     } finally {
       this.isProcessing = false;
     }
@@ -78,7 +84,7 @@ export class OrderMatcherDO {
     }
 
     if (!isMarketOpen()) {
-      await this.state.storage.setAlarm(Date.now() + getNextMarketOpenMs());
+      await this.state.storage.setAlarm(Date.now() + getNextMarketOpenMs() + 1000); // +1s buffer
       return;
     }
 
@@ -87,7 +93,10 @@ export class OrderMatcherDO {
     
     // Add 10% jitter
     const jitter = interval * 0.1 * (Math.random() - 0.5);
-    await this.state.storage.setAlarm(Date.now() + interval + jitter);
+    const nextAlarm = Date.now() + interval + jitter;
+    
+    // Safety: ensure we don't set an alarm for a time that already passed
+    await this.state.storage.setAlarm(Math.max(nextAlarm, Date.now() + 1000));
   }
 
   private async matchOrders() {
@@ -121,6 +130,48 @@ export class OrderMatcherDO {
       if (order.order_type === "market") {
         // Market orders execute immediately upon market open
         shouldExecute = true;
+        
+        // REBALANCING LOGIC: If it's a queued market BUY, we must adjust quantity
+        // to ensure we don't exceed the reserved buying power if the price jumped.
+        if (order.side === "buy") {
+          const portfolio = await this.env.DB.prepare(
+            "SELECT cash_balance FROM portfolios WHERE agent_id = ?"
+          ).bind(order.agent_id).first<{ cash_balance: number }>();
+          
+          if (portfolio) {
+            // Get all other pending buys to find truly available cash
+            const { results: otherBuys } = await this.env.DB.prepare(
+              "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending' AND id != ?"
+            ).bind(order.agent_id, order.id).all<{ symbol: string, quantity: number, limit_price: number | null }>();
+            
+            let reservedForOthers = 0;
+            for (const buy of (otherBuys ?? [])) {
+              if (buy.limit_price) {
+                reservedForOthers += buy.quantity * buy.limit_price;
+              } else {
+                const q = await fetchMarketQuote(buy.symbol, this.env.CACHE, this.env.FINNHUB_API_KEY);
+                reservedForOthers += buy.quantity * q.price;
+              }
+            }
+            
+            const availableForThisOrder = Math.max(0, portfolio.cash_balance - reservedForOthers);
+            const maxSharesAtCurrentPrice = Math.floor(availableForThisOrder / currentPrice);
+            
+            if (maxSharesAtCurrentPrice < order.quantity) {
+              console.log(`[OrderMatcher] Rebalancing market buy for ${order.agent_id}: ${order.quantity} -> ${maxSharesAtCurrentPrice} shares due to price change.`);
+              order.quantity = maxSharesAtCurrentPrice;
+              // Update the order in the DB so the execution records the correct final quantity
+              await this.env.DB.prepare("UPDATE orders SET quantity = ?, updated_at = datetime('now') WHERE id = ?")
+                .bind(order.quantity, order.id).run();
+                
+              if (order.quantity <= 0) {
+                await this.env.DB.prepare("UPDATE orders SET status = 'rejected', last_error = 'Insufficient funds at opening price', updated_at = datetime('now') WHERE id = ?")
+                  .bind(order.id).run();
+                continue;
+              }
+            }
+          }
+        }
       } else if (order.order_type === "limit") {
         if (order.side === "buy" && currentPrice <= orderLimitPrice) {
           shouldExecute = true;

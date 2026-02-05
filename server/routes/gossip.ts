@@ -49,13 +49,13 @@ app.get("/api/v1/gossip/stream", async (c) => {
 
     while (!stream.aborted && !stream.closed) {
       const { results } = await c.env.DB.prepare(
-        "SELECT id, payload FROM system_events WHERE id > ? ORDER BY id ASC LIMIT 100"
+        "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
       )
-        .bind(lastSeenId)
+        .bind(lastSeenId, GOSSIP_ROOM)
         .all();
 
       if (!results || results.length === 0) {
-        await stream.sleep(2000);
+        await stream.sleep(5000);
         continue;
       }
 

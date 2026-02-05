@@ -14,31 +14,50 @@ const recordPortfolioSnapshots = async (env: Bindings) => {
   // Run Recovery Sweep alongside snapshots
   await runGlobalRecoverySweep(env);
 
+  // 1. Fetch current status of all active agents
+  // We join with leaderboards to get current names, though agents table works too.
   const { results } = await env.DB.prepare(
-    "SELECT a.id as agent_id, p.cash_balance, p.equity FROM agents a JOIN portfolios p ON p.agent_id = a.id WHERE a.status = 'active'"
+    "SELECT a.id as agent_id, a.name, p.cash_balance, p.equity FROM agents a JOIN portfolios p ON p.agent_id = a.id WHERE a.status = 'active'"
   ).all();
 
   if (!results || results.length === 0) {
     return;
   }
 
-  const statements: D1PreparedStatement[] = [];
+  const snapshotStatements: D1PreparedStatement[] = [];
+  const leaderboardStatements: D1PreparedStatement[] = [];
 
   for (const row of results) {
     const agentId = String(row?.agent_id ?? "");
     if (!agentId) continue;
+    const agentName = String(row?.name ?? "Unknown Agent");
     const cash = Number(row?.cash_balance ?? 0);
     const total = Number(row?.equity ?? 0);
     const holdings = Math.max(total - cash, 0);
-    statements.push(
+    
+    // Snapshot statement
+    snapshotStatements.push(
       env.DB.prepare(
         "INSERT INTO portfolio_snapshots (agent_id, cash_balance, holdings_value, total_value) VALUES (?, ?, ?, ?)"
       ).bind(agentId, cash, holdings, total)
     );
+
+    // Leaderboard update statement (to ensure it stays in sync with portfolio equity)
+    leaderboardStatements.push(
+      env.DB.prepare(
+        "INSERT INTO leaderboards (agent_id, agent_name, equity, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(agent_id) DO UPDATE SET equity = excluded.equity, agent_name = excluded.agent_name, updated_at = excluded.updated_at"
+      ).bind(agentId, agentName, total)
+    );
   }
 
-  if (statements.length > 0) {
-    await env.DB.batch(statements);
+  // Execute snapshots
+  if (snapshotStatements.length > 0) {
+    await env.DB.batch(snapshotStatements);
+  }
+
+  // Execute leaderboard updates
+  if (leaderboardStatements.length > 0) {
+    await env.DB.batch(leaderboardStatements);
   }
 };
 

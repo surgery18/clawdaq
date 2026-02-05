@@ -33,8 +33,24 @@ export const executeTrade = async (c: any, input: any) => {
   }
   const tradeValue = Number((price * quantity).toFixed(6));
 
-  if (action === "buy" && Number(portfolio.cash_balance) < tradeValue) {
-    return { ok: false, status: 400 as any, error: "insufficient cash" };
+  if (action === "buy") {
+    const pendingBuys = (await c.env.DB.prepare(
+      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending'"
+    ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
+
+    let reservedCash = 0;
+    for (const buy of (pendingBuys.results || [])) {
+      if (buy.limit_price) {
+        reservedCash += Number(buy.quantity) * Number(buy.limit_price);
+      } else {
+        const q = await fetchMarketQuote(buy.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+        reservedCash += Number(buy.quantity) * (q.price || 0);
+      }
+    }
+
+    if (Number(portfolio.cash_balance) - reservedCash < tradeValue) {
+      return { ok: false, status: 400 as any, error: "insufficient buying power (cash reserved for pending orders)" };
+    }
   }
 
   if (action === "sell") {
@@ -234,8 +250,24 @@ export async function executeTradeForOrder(
 
   const cashBalance = Number(portfolio.cash_balance);
 
-  if (action === "buy" && Number(cashBalance) < tradeValue) {
-    return { ok: false, error: "insufficient cash" };
+  if (action === "buy") {
+    const pendingBuys = (await env.DB.prepare(
+      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending' AND id != ?"
+    ).bind(agentId, order.id).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
+
+    let reservedCash = 0;
+    for (const buy of (pendingBuys.results || [])) {
+      if (buy.limit_price) {
+        reservedCash += Number(buy.quantity) * Number(buy.limit_price);
+      } else {
+        const q = await fetchMarketQuote(buy.symbol, env.CACHE, env.FINNHUB_API_KEY);
+        reservedCash += Number(buy.quantity) * (q.price || 0);
+      }
+    }
+
+    if (cashBalance - reservedCash < tradeValue) {
+      return { ok: false, error: "insufficient buying power (cash reserved for other pending orders)" };
+    }
   }
   if (action === "sell") {
     const pendingSell = (await env.DB.prepare(

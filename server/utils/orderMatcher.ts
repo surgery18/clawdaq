@@ -9,7 +9,8 @@ export const triggerOrderMatcher = (c: any, symbol: string) => {
   const run = async (attempt = 0) => {
     try {
       // Pass symbol in query string so DO knows who it is
-      const response = await matcherStub.fetch(new Request(`https://matcher/process?symbol=${upper}`));
+      // We use a timestamp to prevent caching and ensure the fetch actually triggers the DO
+      const response = await matcherStub.fetch(new Request(`https://matcher/process?symbol=${upper}&t=${Date.now()}`));
       if (response.status === 429 && attempt < 3) {
         const delay = 300 * (attempt + 1);
         await new Promise((resolve) => setTimeout(resolve, delay));

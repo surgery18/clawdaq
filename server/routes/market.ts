@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { fetchMarketQuote, syncMarketPulse } from "../marketData";
+import { isMarketOpen, getNextMarketOpenMs } from "../utils/marketHours";
 import { STARTING_CASH } from "../utils/constants";
 import { getMarketHistory, publishMarketEvent, registerMarketStream, safeJson } from "../utils/marketEvents";
 import { NEWS_ROOM } from "../utils/news";
@@ -87,6 +88,13 @@ app.get("/api/v1/market/pulse/sync", async (c) => {
   return c.json(result);
 });
 
+app.get("/api/v1/market/status", async (c) => {
+  return c.json({
+    open: isMarketOpen(),
+    next_open_ms: getNextMarketOpenMs()
+  });
+});
+
 app.get("/api/v1/market/news", async (c) => {
   return streamSSE(c, async (stream) => {
     registerMarketStream(NEWS_ROOM, stream);
@@ -130,13 +138,13 @@ app.get("/api/v1/market/news", async (c) => {
 
     while (!stream.aborted && !stream.closed) {
       const { results } = await c.env.DB.prepare(
-        "SELECT id, payload FROM system_events WHERE id > ? ORDER BY id ASC LIMIT 100"
+        "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
       )
-        .bind(lastSeenId)
+        .bind(lastSeenId, NEWS_ROOM)
         .all();
 
       if (!results || results.length === 0) {
-        await stream.sleep(2000);
+        await stream.sleep(5000);
         continue;
       }
 
@@ -204,13 +212,13 @@ app.get("/api/v1/market/stream/:room", async (c) => {
 
     while (!stream.aborted && !stream.closed) {
       const { results } = await c.env.DB.prepare(
-        "SELECT id, payload FROM system_events WHERE id > ? ORDER BY id ASC LIMIT 100"
+        "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
       )
-        .bind(lastSeenId)
+        .bind(lastSeenId, room)
         .all();
 
       if (!results || results.length === 0) {
-        await stream.sleep(2000);
+        await stream.sleep(5000);
         continue;
       }
 

@@ -78,6 +78,43 @@ app.post("/api/v1/order", botOnly(), async (c) => {
     return c.json({ error: "trail_amount is required" }, 400);
   }
 
+  if (side === "buy") {
+    const portfolio = (await c.env.DB.prepare(
+      "SELECT cash_balance FROM portfolios WHERE agent_id = ?"
+    )
+      .bind(agentId)
+      .first()) as { cash_balance: number } | null;
+    const cash = Number(portfolio?.cash_balance ?? 0);
+
+    const pendingBuy = await c.env.DB.prepare(
+      "SELECT symbol, quantity, limit_price, order_type FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending'"
+    )
+      .bind(agentId)
+      .all();
+
+    let reservedCash = 0;
+    for (const buy of (pendingBuy.results || [])) {
+      if (buy.limit_price) {
+        reservedCash += Number(buy.quantity) * Number(buy.limit_price);
+      } else {
+        const quote = await fetchMarketQuote(String(buy.symbol), c.env.CACHE, c.env.FINNHUB_API_KEY);
+        reservedCash += Number(buy.quantity) * (quote.price || 0);
+      }
+    }
+
+    let estimatedOrderCost = 0;
+    if (orderType === "limit") {
+      estimatedOrderCost = quantity * limitPrice;
+    } else {
+      const currentQuote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+      estimatedOrderCost = quantity * currentQuote.price;
+    }
+
+    if (cash - reservedCash < estimatedOrderCost) {
+      return c.json({ error: "insufficient buying power (reserved for pending buy orders)" }, 400);
+    }
+  }
+
   if (side === "sell") {
     const holding = await c.env.DB.prepare(
       "SELECT quantity FROM holdings WHERE agent_id = ? AND symbol = ?"
