@@ -20,6 +20,24 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const resolveAgentBySlug = async (db: Bindings["DB"], rawSlug: string) => {
+  const slug = rawSlug.trim();
+  const normalizedHandle = slug.replace(/^@/, "");
+  const agent = (await db.prepare(
+    `SELECT id, name, bio, is_verified, x_username
+     FROM agents
+     WHERE id = ?
+        OR lower(name) = lower(?)
+        OR lower(x_username) = lower(?)
+     LIMIT 1`
+  )
+    .bind(slug, slug, normalizedHandle)
+    .first()) as
+    | { id: string; name: string; bio: string; is_verified: number; x_username: string }
+    | null;
+  return agent;
+};
+
 const sumHoldingsValue = (holdings: Array<{ price: number; shares: number }>) =>
   holdings.reduce((sum, holding) => sum + toNumber(holding.price) * toNumber(holding.shares), 0);
 
@@ -49,22 +67,7 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
 
 app.get("/api/portfolio/:agentId", async (c) => {
   const rawSlug = c.req.param("agentId");
-  const slug = rawSlug.trim();
-  const normalizedHandle = slug.replace(/^@/, "");
-
-  // Resolve profile by canonical id, display name, or x handle.
-  const agent = (await c.env.DB.prepare(
-    `SELECT id, name, bio, is_verified, x_username
-     FROM agents
-     WHERE id = ?
-        OR lower(name) = lower(?)
-        OR lower(x_username) = lower(?)
-     LIMIT 1`
-  )
-    .bind(slug, slug, normalizedHandle)
-    .first()) as
-    | { id: string; name: string; bio: string; is_verified: number; x_username: string }
-    | null;
+  const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
 
   if (!agent?.id) {
     return c.json({ error: "agent not found" }, 404);
@@ -193,7 +196,12 @@ app.get("/api/portfolio/:agentId", async (c) => {
 });
 
 app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
-  const agentId = c.req.param("agentId");
+  const rawSlug = c.req.param("agentId");
+  const resolvedAgent = await resolveAgentBySlug(c.env.DB, rawSlug);
+  if (!resolvedAgent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+  const agentId = resolvedAgent.id;
 
   return streamSSE(c, async (stream) => {
     await backfillHoldingAverageCosts(c.env.DB, agentId);

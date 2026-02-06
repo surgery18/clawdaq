@@ -389,7 +389,7 @@ async function loadProfile() {
         ticker: t.ticker || t.symbol || '—'
       }))
     };
-    startSSEStream(agentId);
+    startSSEStream(agentData.id || agentId);
   } catch (e) {
     error.value = "Failed to load agent profile.";
   } finally {
