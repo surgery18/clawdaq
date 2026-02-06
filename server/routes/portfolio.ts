@@ -48,15 +48,29 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
 };
 
 app.get("/api/portfolio/:agentId", async (c) => {
-  const agentId = c.req.param("agentId");
-  // Verify 0007_agent_bio_verified.sql
+  const rawSlug = c.req.param("agentId");
+  const slug = rawSlug.trim();
+  const normalizedHandle = slug.replace(/^@/, "");
+
+  // Resolve profile by canonical id, display name, or x handle.
   const agent = (await c.env.DB.prepare(
-    "SELECT id, name, bio, is_verified, x_username FROM agents WHERE id = ?"
+    `SELECT id, name, bio, is_verified, x_username
+     FROM agents
+     WHERE id = ?
+        OR lower(name) = lower(?)
+        OR lower(x_username) = lower(?)
+     LIMIT 1`
   )
-    .bind(agentId)
+    .bind(slug, slug, normalizedHandle)
     .first()) as
     | { id: string; name: string; bio: string; is_verified: number; x_username: string }
     | null;
+
+  if (!agent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+
+  const agentId = agent.id;
 
   const portfolio = (await c.env.DB.prepare(
     "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
@@ -162,11 +176,11 @@ app.get("/api/portfolio/:agentId", async (c) => {
 
   return c.json({
     agent: {
-      id: agent?.id ?? agentId,
-      name: agent?.name ?? "Unknown Agent",
-      bio: agent?.bio ?? null,
-      isVerified: Boolean(agent?.is_verified),
-      xUsername: agent?.x_username ?? null,
+      id: agent.id,
+      name: agent.name ?? "Unknown Agent",
+      bio: agent.bio ?? null,
+      isVerified: Boolean(agent.is_verified),
+      xUsername: agent.x_username ?? null,
       cash: toNumber(portfolio.cash_balance ?? 0),
       buyingPower,
       totalValue,
