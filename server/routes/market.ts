@@ -10,6 +10,16 @@ import type { Bindings, MarketEvent } from "../utils/types";
 import { botOnly } from "../botOnly";
 
 const app = new Hono<{ Bindings: Bindings }>();
+const MAX_SSE_INVOCATION_MS = 45_000;
+
+const getResumeEventId = (c: any): number | null => {
+  const headerValue = c.req.header("last-event-id");
+  const queryValue = c.req.query("lastEventId") ?? c.req.query("last_event_id");
+  const raw = headerValue ?? queryValue;
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
 
 app.get("/api/leaderboard", async (c) => {
   const { results } = await c.env.DB.prepare(
@@ -99,6 +109,8 @@ app.get("/api/v1/market/status", async (c) => {
 app.get("/api/v1/market/news", async (c) => {
   return streamSSE(c, async (stream) => {
     registerMarketStream(NEWS_ROOM, stream);
+    const startedAt = Date.now();
+    const resumeFromEventId = getResumeEventId(c);
 
     const connectedEvent: MarketEvent = {
       type: "system",
@@ -112,8 +124,8 @@ app.get("/api/v1/market/news", async (c) => {
       data: JSON.stringify(connectedEvent)
     });
 
-    const history = await getMarketHistory(c.env, NEWS_ROOM, 50);
-    if (history.length > 0) {
+    const history = resumeFromEventId ? [] : await getMarketHistory(c.env, NEWS_ROOM, 50);
+    if (!resumeFromEventId && history.length > 0) {
       const historyEvent: MarketEvent = {
         type: "history",
         room: NEWS_ROOM,
@@ -130,14 +142,30 @@ app.get("/api/v1/market/news", async (c) => {
     }
 
     let lastSeenId =
-      history.length > 0
+      resumeFromEventId ??
+      (history.length > 0
         ? history[history.length - 1].id
         : Number(
             (await c.env.DB.prepare("SELECT id FROM system_events ORDER BY id DESC LIMIT 1").first())
               ?.id ?? 0
-          );
+          ));
 
     while (!stream.aborted && !stream.closed) {
+      if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
+        const rotateEvent: MarketEvent = {
+          type: "system",
+          room: NEWS_ROOM,
+          payload: { message: "reconnect_required", last_event_id: lastSeenId },
+          created_at: new Date().toISOString()
+        };
+        await stream.writeSSE({
+          event: rotateEvent.type,
+          data: JSON.stringify(rotateEvent),
+          id: String(lastSeenId)
+        });
+        return;
+      }
+
       const { results } = await c.env.DB.prepare(
         "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
       )
@@ -173,6 +201,8 @@ app.get("/api/v1/market/stream/:room", async (c) => {
 
   return streamSSE(c, async (stream) => {
     registerMarketStream(room, stream);
+    const startedAt = Date.now();
+    const resumeFromEventId = getResumeEventId(c);
 
     const connectedEvent: MarketEvent = {
       type: "system",
@@ -186,8 +216,8 @@ app.get("/api/v1/market/stream/:room", async (c) => {
       data: JSON.stringify(connectedEvent)
     });
 
-    const history = await getMarketHistory(c.env, room, 50);
-    if (history.length > 0) {
+    const history = resumeFromEventId ? [] : await getMarketHistory(c.env, room, 50);
+    if (!resumeFromEventId && history.length > 0) {
       const historyEvent: MarketEvent = {
         type: "history",
         room,
@@ -204,14 +234,30 @@ app.get("/api/v1/market/stream/:room", async (c) => {
     }
 
     let lastSeenId =
-      history.length > 0
+      resumeFromEventId ??
+      (history.length > 0
         ? history[history.length - 1].id
         : Number(
             (await c.env.DB.prepare("SELECT id FROM system_events ORDER BY id DESC LIMIT 1").first())?.id ??
               0
-          );
+          ));
 
     while (!stream.aborted && !stream.closed) {
+      if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
+        const rotateEvent: MarketEvent = {
+          type: "system",
+          room,
+          payload: { message: "reconnect_required", last_event_id: lastSeenId },
+          created_at: new Date().toISOString()
+        };
+        await stream.writeSSE({
+          event: rotateEvent.type,
+          data: JSON.stringify(rotateEvent),
+          id: String(lastSeenId)
+        });
+        return;
+      }
+
       const { results } = await c.env.DB.prepare(
         "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
       )
