@@ -17,7 +17,11 @@ type PendingOrder = {
   trail_high_price?: number | null;
   trail_low_price?: number | null;
   attempt_count: number;
+  reasoning: string | null;
+  strategy_id: string | null;
 };
+
+const datetimeNow = () => new Date().toISOString().replace('T', ' ').split('.')[0];
 
 export class OrderMatcherDO {
   private state: DurableObjectState;
@@ -45,6 +49,17 @@ export class OrderMatcherDO {
       try {
         await this.matchOrders();
         await this.manageAlarm();
+        return new Response("OK");
+      } finally {
+        this.isProcessing = false;
+      }
+    }
+    if (url.pathname === "/recovery") {
+      if (this.isProcessing) return new Response("Busy", { status: 429 });
+      this.isProcessing = true;
+      try {
+        // Direct recovery trigger for this symbol
+        await this.matchOrders();
         return new Response("OK");
       } finally {
         this.isProcessing = false;
@@ -88,7 +103,7 @@ export class OrderMatcherDO {
       return;
     }
 
-    const hasTrailing = results.some(r => r.order_type === 'trailing_stop');
+    const hasTrailing = results.some((r: any) => r.order_type === 'trailing_stop');
     const interval = hasTrailing ? 2000 : 10000; // 2s for trailing, 10s for others
     
     // Add 10% jitter
@@ -141,7 +156,7 @@ export class OrderMatcherDO {
           if (portfolio) {
             // Get all other pending buys to find truly available cash
             const { results: otherBuys } = await this.env.DB.prepare(
-              "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending' AND id != ?"
+              "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing') AND id != ?"
             ).bind(order.agent_id, order.id).all<{ symbol: string, quantity: number, limit_price: number | null }>();
             
             let reservedForOthers = 0;
@@ -161,11 +176,11 @@ export class OrderMatcherDO {
               console.log(`[OrderMatcher] Rebalancing market buy for ${order.agent_id}: ${order.quantity} -> ${maxSharesAtCurrentPrice} shares due to price change.`);
               order.quantity = maxSharesAtCurrentPrice;
               // Update the order in the DB so the execution records the correct final quantity
-              await this.env.DB.prepare("UPDATE orders SET quantity = ?, updated_at = datetime('now') WHERE id = ?")
+              await this.env.DB.prepare("UPDATE orders SET quantity = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                 .bind(order.quantity, order.id).run();
                 
               if (order.quantity <= 0) {
-                await this.env.DB.prepare("UPDATE orders SET status = 'rejected', last_error = 'Insufficient funds at opening price', updated_at = datetime('now') WHERE id = ?")
+                await this.env.DB.prepare("UPDATE orders SET status = 'rejected', last_error = 'Insufficient funds at opening price', updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                   .bind(order.id).run();
                 continue;
               }
@@ -195,7 +210,7 @@ export class OrderMatcherDO {
             trailHigh = currentPrice;
             // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5% to reduce DB load
             if (oldHigh === 0 || (trailHigh - oldHigh) / oldHigh > 0.005) {
-              await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ?")
+              await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                 .bind(trailHigh, order.id).run();
             }
           }
@@ -208,7 +223,7 @@ export class OrderMatcherDO {
             trailLow = currentPrice;
             // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5%
             if (oldLow === 0 || (oldLow - trailLow) / oldLow > 0.005) {
-              await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ?")
+              await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                 .bind(trailLow, order.id).run();
             }
           }
@@ -245,7 +260,8 @@ export class OrderMatcherDO {
             symbol: order.symbol,
             side: order.side,
             quantity: order.quantity,
-            price: executionPrice
+            price: executionPrice,
+            strategy_id: order.strategy_id
           });
         } else {
           // REJECTED (Business failure: no money/shares)

@@ -11,6 +11,8 @@ import { backfillAllHoldingAverageCosts, backfillHoldingAverageCosts } from "../
 import { getBaseUrl } from "../utils/url";
 import type { Bindings } from "../utils/types";
 
+const datetimeNow = () => new Date().toISOString().replace('T', ' ').split('.')[0];
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 const toNumber = (value: unknown, fallback = 0) => {
@@ -100,7 +102,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
   );
 
   const { results: pendingResultsRaw } = await c.env.DB.prepare(
-    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning FROM orders WHERE agent_id = ? AND status = 'pending' ORDER BY created_at DESC"
+    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning, strategy_id FROM orders WHERE agent_id = ? AND status IN ('pending', 'executing') ORDER BY created_at DESC"
   )
     .bind(agentId)
     .all();
@@ -141,7 +143,7 @@ app.get("/api/portfolio/:agentId", async (c) => {
 
   // Buying Power Adjustment: Deduct pending buy orders from available cash
   const pendingBuys = (await c.env.DB.prepare(
-    "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending'"
+    "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
   ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
 
   let reservedCash = 0;
@@ -335,7 +337,7 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
     .first();
 
   const openOrders = await c.env.DB.prepare(
-    "SELECT COUNT(*) as open_orders FROM orders WHERE agent_id = ? AND status = 'pending'"
+    "SELECT COUNT(*) as open_orders FROM orders WHERE agent_id = ? AND status IN ('pending', 'executing')"
   )
     .bind(agentId)
     .first();
@@ -355,6 +357,51 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
     lastTradeAt: stats?.last_trade_at ?? null,
     openOrders: Number(openOrders?.open_orders ?? 0),
     updatedAt: portfolio.updated_at
+  });
+});
+
+app.get("/api/v1/portfolio/:agent_id/explain", async (c) => {
+  const agentId = c.req.param("agent_id");
+  const portfolio = (await c.env.DB.prepare(
+    "SELECT cash_balance, equity FROM portfolios WHERE agent_id = ?"
+  ).bind(agentId).first()) as { cash_balance: number, equity: number } | null;
+
+  if (!portfolio) return c.json({ error: "portfolio not found" }, 404);
+
+  const pendingBuysRows = await c.env.DB.prepare(
+    "SELECT symbol, quantity, limit_price, order_type FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
+  ).bind(agentId).all();
+
+  const reservations = [];
+  let totalReserved = 0;
+
+  for (const buy of (pendingBuysRows.results ?? [])) {
+    let price = Number(buy.limit_price);
+    let isEstimate = false;
+    if (!price || price === 0) {
+      const quote = await fetchMarketQuote(String(buy.symbol), c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { maxAgeSeconds: 60 });
+      price = quote.price;
+      isEstimate = true;
+    }
+    const amount = Number(buy.quantity) * price;
+    totalReserved += amount;
+    reservations.push({
+      symbol: buy.symbol,
+      quantity: buy.quantity,
+      price,
+      is_estimate: isEstimate,
+      amount,
+      order_type: buy.order_type
+    });
+  }
+
+  return c.json({
+    agent_id: agentId,
+    total_cash: portfolio.cash_balance,
+    total_reserved: totalReserved,
+    buying_power: Math.max(0, portfolio.cash_balance - totalReserved),
+    reservations,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -412,7 +459,7 @@ app.post("/api/v1/refill", botOnly(), async (c) => {
     JSON.stringify({
       agent_id: agentId,
       agent_name: auth.agentName,
-      created_at: new Date().toISOString()
+      created_at: datetimeNow()
     }),
     { expirationTtl: 86400 }
   );
@@ -477,19 +524,20 @@ app.post("/api/v1/refill/:token", async (c) => {
   }
 
   // 1. Reset Portfolio
+  const nowReset = datetimeNow();
   await c.env.DB.batch([
     c.env.DB.prepare(
-      "UPDATE portfolios SET cash_balance = ?, equity = ?, updated_at = datetime('now') WHERE agent_id = ?"
-    ).bind(STARTING_CASH, STARTING_CASH, data.agent_id),
+      "UPDATE portfolios SET cash_balance = ?, equity = ?, updated_at = ? WHERE agent_id = ?"
+    ).bind(STARTING_CASH, STARTING_CASH, nowReset, data.agent_id),
     c.env.DB.prepare(
-      "UPDATE leaderboards SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?"
-    ).bind(STARTING_CASH, data.agent_id),
+      "UPDATE leaderboards SET equity = ?, updated_at = ? WHERE agent_id = ?"
+    ).bind(STARTING_CASH, nowReset, data.agent_id),
     // Wipe holdings to start fresh? Or keep them? 
     // Usually a "refill" implies bankruptcy reset, so we should wipe holdings.
     c.env.DB.prepare("DELETE FROM holdings WHERE agent_id = ?").bind(data.agent_id),
     c.env.DB.prepare(
-      "UPDATE orders SET status = 'cancelled', updated_at = datetime('now') WHERE id = ? AND status = 'pending'"
-    ).bind(data.agent_id)
+      "UPDATE orders SET status = 'cancelled', updated_at = ? WHERE agent_id = ? AND status = 'pending'"
+    ).bind(nowReset, data.agent_id)
   ]);
 
   // 2. Publish Shame Event

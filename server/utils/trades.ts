@@ -35,7 +35,7 @@ export const executeTrade = async (c: any, input: any) => {
 
   if (action === "buy") {
     const pendingBuys = (await c.env.DB.prepare(
-      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending'"
+      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
     ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
 
     let reservedCash = 0;
@@ -55,7 +55,7 @@ export const executeTrade = async (c: any, input: any) => {
 
   if (action === "sell") {
     const pendingSell = (await c.env.DB.prepare(
-      "SELECT SUM(quantity) as total FROM orders WHERE agent_id = ? AND symbol = ? AND side = 'sell' AND status = 'pending'"
+      "SELECT SUM(quantity) as total FROM orders WHERE agent_id = ? AND symbol = ? AND side = 'sell' AND status IN ('pending', 'executing')"
     )
       .bind(agentId, symbol)
       .first()) as { total: number | null } | null;
@@ -107,7 +107,7 @@ export const executeTrade = async (c: any, input: any) => {
     }
   }
   // If we didn't have the symbol before and it's a buy, add it
-  if (action === "buy" && !currentHoldingsRows.results?.some(r => r.symbol === symbol)) {
+  if (action === "buy" && !currentHoldingsRows.results?.some((r: any) => r.symbol === symbol)) {
     holdingsValue += quantity * priceAfter;
   }
 
@@ -156,8 +156,8 @@ export const executeTrade = async (c: any, input: any) => {
 
   statements.push(
     c.env.DB.prepare(
-      "INSERT INTO transactions (agent_id, symbol, side, quantity, price, market_source, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(agentId, symbol, action, quantity, priceAfter, quoteAfter.source, input.reasoning ?? null)
+      "INSERT INTO transactions (agent_id, symbol, side, quantity, price, market_source, reasoning, strategy_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(agentId, symbol, action, quantity, priceAfter, quoteAfter.source, input.reasoning ?? null, input.strategy_id ?? null)
   );
 
   const results = await c.env.DB.batch(statements);
@@ -274,7 +274,7 @@ export async function executeTradeForOrder(
 
   if (action === "buy") {
     const pendingBuys = (await env.DB.prepare(
-      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status = 'pending' AND id != ?"
+      "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing') AND id != ?"
     ).bind(agentId, order.id).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
 
     let reservedCash = 0;
@@ -293,7 +293,7 @@ export async function executeTradeForOrder(
   }
   if (action === "sell") {
     const pendingSell = (await env.DB.prepare(
-      "SELECT SUM(quantity) as total FROM orders WHERE agent_id = ? AND symbol = ? AND side = 'sell' AND status = 'pending' AND id != ?"
+      "SELECT SUM(quantity) as total FROM orders WHERE agent_id = ? AND symbol = ? AND side = 'sell' AND status IN ('pending', 'executing') AND id != ?"
     )
       .bind(agentId, symbol, order.id)
       .first()) as { total: number | null } | null;
@@ -333,7 +333,7 @@ export async function executeTradeForOrder(
       holdingsValue += quantityRow * (q.price || 0);
     }
   }
-  if (action === "buy" && !currentHoldingsRows.results?.some(r => r.symbol === symbol)) {
+  if (action === "buy" && !currentHoldingsRows.results?.some((r: any) => r.symbol === symbol)) {
     holdingsValue += quantity * price;
   }
 
@@ -381,8 +381,8 @@ export async function executeTradeForOrder(
 
   statements.push(
     env.DB.prepare(
-      "INSERT INTO transactions (agent_id, symbol, side, quantity, price, market_source, reasoning) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).bind(agentId, symbol, action, quantity, price, source, order.reasoning ?? null)
+      "INSERT INTO transactions (agent_id, symbol, side, quantity, price, market_source, reasoning, strategy_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(agentId, symbol, action, quantity, price, source, order.reasoning ?? null, order.strategy_id ?? null)
   );
 
   const results = await env.DB.batch(statements);

@@ -85,7 +85,7 @@ app.get("/api/v1/market/status/finnhub", async (c) => {
 });
 
 app.get("/api/v1/market/pulse/sync", async (c) => {
-  const result = await syncMarketPulse(c.env.DB, c.env.CACHE, c.env.FINNHUB_API_KEY);
+  const result = await syncMarketPulse(c.env.DB, c.env.CACHE, c.env.FINNHUB_API_KEY || "");
   return c.json(result);
 });
 

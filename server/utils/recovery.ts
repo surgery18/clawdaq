@@ -8,7 +8,7 @@ export const runGlobalRecoverySweep = async (env: Bindings) => {
   // 1. Move stale 'executing' orders back to 'pending' (timeout: 5 minutes)
   const staleExecuting = await env.DB.prepare(`
     UPDATE orders 
-    SET status = 'pending', attempt_id = NULL, last_error = 'execution_timeout'
+    SET status = 'pending', attempt_id = NULL, last_error = 'execution_timeout', updated_at = datetime('now')
     WHERE status = 'executing' 
     AND last_attempt_at < datetime('now', '-5 minutes')
   `).run();
@@ -34,7 +34,7 @@ export const runGlobalRecoverySweep = async (env: Bindings) => {
   // ONLY if the market is currently open.
   if (isMarketOpen()) {
     const { results: activeSymbols } = await env.DB.prepare(
-      "SELECT DISTINCT symbol FROM orders WHERE status = 'pending'"
+      "SELECT DISTINCT symbol FROM orders WHERE status IN ('pending', 'executing')"
     ).all<{ symbol: string }>();
 
     for (const row of activeSymbols ?? []) {
@@ -43,6 +43,8 @@ export const runGlobalRecoverySweep = async (env: Bindings) => {
       const matcherStub = env.ORDER_MATCHER_DO.get(matcherId);
       // Silent nudge with timestamp to ensure it's not cached/ignored
       await matcherStub.fetch(new Request(`https://matcher/process?symbol=${upper}&sweep=true&t=${Date.now()}`)).catch(() => {});
+      // Also trigger a recovery path check
+      await matcherStub.fetch(new Request(`https://matcher/recovery?symbol=${upper}&t=${Date.now()}`)).catch(() => {});
     }
   }
 };

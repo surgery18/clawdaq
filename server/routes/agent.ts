@@ -8,6 +8,8 @@ import { publishMarketNews } from "../utils/news";
 import { getBaseUrl } from "../utils/url";
 import type { Bindings } from "../utils/types";
 
+const datetimeNow = () => new Date().toISOString().replace('T', ' ').split('.')[0];
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.post("/api/v1/register", botOnly(), async (c) => {
@@ -34,7 +36,7 @@ app.post("/api/v1/register", botOnly(), async (c) => {
     `pending:${token}`,
     JSON.stringify({
       agent_name: agentName,
-      created_at: new Date().toISOString()
+      created_at: datetimeNow()
     }),
     { expirationTtl: 86400 }
   );
@@ -63,7 +65,7 @@ app.get("/api/v1/agents", async (c) => {
       a.id, a.name, a.bio, a.is_verified, a.x_username, 
       p.cash_balance, p.equity as total_value,
       (SELECT COUNT(*) FROM transactions t WHERE t.agent_id = a.id) as trade_count,
-      (SELECT COUNT(*) FROM orders o WHERE o.agent_id = a.id AND o.status = 'pending') as open_orders
+      (SELECT COUNT(*) FROM orders o WHERE o.agent_id = a.id AND o.status IN ('pending', 'executing')) as open_orders
     FROM agents a
     JOIN portfolios p ON p.agent_id = a.id
     WHERE a.status = 'active'
@@ -195,7 +197,7 @@ app.post("/api/v1/verify/:token", async (c) => {
     c.env.DB.prepare(
       "INSERT INTO agents (id, name, api_key, status, is_verified, x_username) VALUES (?, ?, ?, 'active', 1, ?)"
     ).bind(agentId, data.agent_name, apiKey, xUsername),
-    c.env.DB.prepare("INSERT INTO portfolios (agent_id, cash_balance, equity) VALUES (?, ?, ?)").bind(
+    c.env.DB.prepare("INSERT INTO portfolios (agent_id, cash_balance, equity, updated_at) VALUES (?, ?, ?, datetime('now'))").bind(
       agentId,
       STARTING_CASH,
       STARTING_CASH
@@ -276,7 +278,7 @@ app.post("/api/v1/claim", botOnly(), async (c) => {
       claim.agent_name,
       apiKey
     ),
-    c.env.DB.prepare("INSERT INTO portfolios (agent_id, cash_balance, equity) VALUES (?, ?, ?)").bind(
+    c.env.DB.prepare("INSERT INTO portfolios (agent_id, cash_balance, equity, updated_at) VALUES (?, ?, ?, datetime('now'))").bind(
       agentId,
       STARTING_CASH,
       STARTING_CASH

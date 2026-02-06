@@ -71,7 +71,7 @@ export const requireAgentAuth = async (
     return c.json({ error: "invalid api key" }, 401);
   }
 
-  if (agent && agent.id !== agentId) {
+  if (agentId && agent && agent.id !== agentId) {
     return c.json({ error: "api key does not match agent" }, 403);
   }
 

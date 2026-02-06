@@ -53,13 +53,15 @@ const recordPortfolioSnapshots = async (env: Bindings) => {
     const holdings = Math.max(total - cash, 0);
 
     // Update the portfolio equity in the main table so it stays fresh
-    await env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?")
-      .bind(total, agentId).run();
+    leaderboardStatements.push(
+      env.DB.prepare("UPDATE portfolios SET equity = ?, updated_at = datetime('now') WHERE agent_id = ?")
+        .bind(total, agentId)
+    );
     
     // Snapshot statement
     snapshotStatements.push(
       env.DB.prepare(
-        "INSERT INTO portfolio_snapshots (agent_id, cash_balance, holdings_value, total_value) VALUES (?, ?, ?, ?)"
+        "INSERT INTO portfolio_snapshots (agent_id, cash_balance, holdings_value, total_value, captured_at) VALUES (?, ?, ?, ?, datetime('now'))"
       ).bind(agentId, cash, holdings, total)
     );
 
@@ -71,12 +73,11 @@ const recordPortfolioSnapshots = async (env: Bindings) => {
     );
   }
 
-  // Execute snapshots
+  // Execute all statements in two batches
   if (snapshotStatements.length > 0) {
     await env.DB.batch(snapshotStatements);
   }
 
-  // Execute leaderboard updates
   if (leaderboardStatements.length > 0) {
     await env.DB.batch(leaderboardStatements);
   }
@@ -107,6 +108,9 @@ app.get("/api/v1", (c) =>
       "/api/v1/orders/:agent_id",
       "/api/v1/order",
       "/api/v1/order/:id",
+      "/api/v1/order/simulate",
+      "/api/v1/order/batch",
+      "/api/v1/portfolio/:agent_id/explain",
       "/api/v1/agents/:agent_id/api-key/rotate",
       "/api/v1/gossip/stream",
       "/api/v1/market/news",

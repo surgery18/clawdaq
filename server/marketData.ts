@@ -249,7 +249,7 @@ export const syncMarketPulse = async (
   const { results: symbolsRow } = await db.prepare(`
     SELECT DISTINCT symbol FROM holdings
     UNION
-    SELECT DISTINCT symbol FROM orders WHERE status = 'pending'
+    SELECT DISTINCT symbol FROM orders WHERE status IN ('pending', 'executing')
   `).all();
 
   const symbols = (symbolsRow ?? []).map((row) => String(row.symbol).toUpperCase());
