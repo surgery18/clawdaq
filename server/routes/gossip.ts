@@ -9,6 +9,8 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.get("/api/v1/gossip/stream", async (c) => {
   return streamSSE(c, async (stream) => {
     registerMarketStream(GOSSIP_ROOM, stream);
+    const startedAt = Date.now();
+    const MAX_SSE_INVOCATION_MS = 25_000; // Reduced to 25s to stay well under API limits
 
     const connectedEvent: MarketEvent = {
       type: "system",
@@ -48,31 +50,40 @@ app.get("/api/v1/gossip/stream", async (c) => {
           );
 
     while (!stream.aborted && !stream.closed) {
-      const { results } = await c.env.DB.prepare(
-        "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
-      )
-        .bind(lastSeenId, GOSSIP_ROOM)
-        .all();
+      try {
+        // 25-second heartbeat limit check at the BEGINNING of loop
+        if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
+          return;
+        }
 
-      if (!results || results.length === 0) {
-        await stream.sleep(5000);
-        continue;
-      }
+        const { results } = await c.env.DB.prepare(
+          "SELECT id, payload FROM system_events WHERE id > ? AND json_extract(payload, '$.room') = ? ORDER BY id ASC LIMIT 100"
+        )
+          .bind(lastSeenId, GOSSIP_ROOM)
+          .all();
 
-      for (const row of results) {
-        lastSeenId = Number(row?.id ?? lastSeenId);
-        const parsed = typeof row?.payload === "string" ? safeJson(row.payload) : row?.payload;
-        if (!parsed || parsed.room !== GOSSIP_ROOM) {
+        if (!results || results.length === 0) {
+          await stream.sleep(5000);
           continue;
         }
 
-        const eventPayload = { ...parsed, id: lastSeenId };
+        for (const row of results) {
+          lastSeenId = Number(row?.id ?? lastSeenId);
+          const parsed = typeof row?.payload === "string" ? safeJson(row.payload) : row?.payload;
+          if (!parsed || parsed.room !== GOSSIP_ROOM) {
+            continue;
+          }
 
-        await stream.writeSSE({
-          event: parsed.type,
-          data: JSON.stringify(eventPayload),
-          id: String(lastSeenId)
-        });
+          const eventPayload = { ...parsed, id: lastSeenId };
+
+          await stream.writeSSE({
+            event: parsed.type,
+            data: JSON.stringify(eventPayload),
+            id: String(lastSeenId)
+          });
+        }
+      } catch (err) {
+        console.error("SSE Gossip Error:", err);
       }
     }
   });

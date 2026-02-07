@@ -33,7 +33,7 @@ const apiFetch = async (path, options = {}) => {
 export const getLeaderboard = () => apiFetch("/leaderboard");
 
 export const getPortfolio = (agentId) =>
-  apiFetch(`/portfolio/${encodeURIComponent(agentId)}`);
+  apiFetch(`/v1/portfolio/${encodeURIComponent(agentId)}`);
 
 export const getPortfolioAnalytics = (agentId) =>
   apiFetch(`/v1/portfolio/${encodeURIComponent(agentId)}/analytics`);

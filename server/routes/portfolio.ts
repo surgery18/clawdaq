@@ -65,7 +65,137 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
   return null;
 };
 
-app.get("/api/portfolio/:agentId", async (c) => {
+app.get("/api/v1/portfolio/:agentId", async (c) => {
+  const rawSlug = c.req.param("agentId");
+  const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
+
+  if (!agent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+
+  const agentId = agent.id;
+
+  const portfolio = (await c.env.DB.prepare(
+    "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
+  )
+    .bind(agentId)
+    .first()) as { cash_balance: number; equity: number; updated_at: string } | null;
+
+  if (!portfolio) {
+    return c.json({ error: "portfolio not found" }, 404);
+  }
+
+  await backfillHoldingAverageCosts(c.env.DB, agentId);
+
+  const holdingsRows = await c.env.DB.prepare(
+    "SELECT symbol, quantity, average_cost FROM holdings WHERE agent_id = ? ORDER BY symbol ASC"
+  )
+    .bind(agentId)
+    .all();
+
+  const holdings = await Promise.all(
+    (holdingsRows.results ?? []).map(async (row) => {
+      const shares = toNumber(row?.quantity ?? 0);
+      const averageCost = toNumber(row?.average_cost ?? 0);
+      const quote = await fetchMarketQuote(
+        String(row?.symbol ?? ""),
+        c.env.CACHE,
+        c.env.FINNHUB_API_KEY,
+        fetch,
+        { maxAgeSeconds: 15 }
+      );
+      const price = toNumber(quote.price ?? 0);
+      const value = Number((shares * price).toFixed(2));
+      return {
+        ticker: row?.symbol ?? "",
+        shares,
+        value,
+        price,
+        averageCost,
+        asOf: quote.asOf,
+        source: quote.source
+      };
+    })
+  );
+
+  const { results: pendingResultsRaw } = await c.env.DB.prepare(
+    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning, strategy_id FROM orders WHERE agent_id = ? AND status IN ('pending', 'executing') ORDER BY created_at DESC"
+  )
+    .bind(agentId)
+    .all();
+
+  const pendingResults = await Promise.all(
+    (pendingResultsRaw ?? []).map(async (o: any) => {
+      if (o.order_type === 'market') {
+        const quote = await fetchMarketQuote(o.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+        return { ...o, price: quote.price };
+      }
+      return o;
+    })
+  );
+
+  // Verify 0005_reasoning_column.sql
+  const tradesRows = await c.env.DB.prepare(
+    "SELECT id, symbol, side, quantity, price, executed_at, reasoning FROM transactions WHERE agent_id = ? ORDER BY executed_at DESC LIMIT 50"
+  )
+    .bind(agentId)
+    .all();
+
+  const trades = (tradesRows.results ?? []).map((row) => {
+    const quantity = toNumber(row?.quantity ?? 0);
+    const price = toNumber(row?.price ?? 0);
+    return {
+      id: row?.id ?? null,
+      ticker: row?.symbol ?? "",
+      action: row?.side ?? "",
+      quantity,
+      price,
+      amount: Number((price * quantity).toFixed(2)),
+      executed_at: row?.executed_at ?? null,
+      reasoning: row?.reasoning ?? null
+    };
+  });
+
+  const holdingsValue = sumHoldingsValue(holdings);
+
+  // Buying Power Adjustment: Deduct pending buy orders from available cash
+  const pendingBuys = (await c.env.DB.prepare(
+    "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
+  ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
+
+  let reservedCash = 0;
+  for (const buy of (pendingBuys.results || [])) {
+    if (buy.limit_price) {
+      reservedCash += Number(buy.quantity) * Number(buy.limit_price);
+    } else {
+      // Market order: use current price as estimate for reservation
+      const quote = await fetchMarketQuote(buy.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { maxAgeSeconds: 60 });
+      reservedCash += Number(buy.quantity) * (quote.price || 0);
+    }
+  }
+
+  const buyingPower = Math.max(0, toNumber(portfolio.cash_balance ?? 0) - reservedCash);
+  const totalValue = toNumber(portfolio.cash_balance ?? 0) + holdingsValue;
+
+  return c.json({
+    agent: {
+      id: agent.id,
+      name: agent.name ?? "Unknown Agent",
+      bio: agent.bio ?? null,
+      isVerified: Boolean(agent.is_verified),
+      xUsername: agent.x_username ?? null,
+      cash: toNumber(portfolio.cash_balance ?? 0),
+      buyingPower,
+      totalValue,
+      updatedAt: portfolio.updated_at,
+      holdings,
+      trades,
+      pendingOrders: pendingResults ?? []
+    }
+  });
+});
+
+app.get("/api/v1/portfolio/:agentId", async (c) => {
   const rawSlug = c.req.param("agentId");
   const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
 
@@ -205,6 +335,8 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
 
   return streamSSE(c, async (stream) => {
     await backfillHoldingAverageCosts(c.env.DB, agentId);
+    const startedAt = Date.now();
+    const MAX_SSE_INVOCATION_MS = 25_000; // Reduced to 25s to stay well under API limits
 
     // Initial data push
     const getSnapshot = async () => {
@@ -227,7 +359,7 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
             c.env.CACHE,
             c.env.FINNHUB_API_KEY,
             fetch,
-            { maxAgeSeconds: 30 } // Use cache if fresh within 30s
+            { maxAgeSeconds: 60 } // Increased cache tolerance to 60s to reduce fetch sub-requests
           );
           const shares = toNumber(row?.quantity ?? 0);
           const averageCost = toNumber(row?.average_cost ?? 0);
@@ -258,6 +390,11 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
     // Loop and stream
     while (!stream.aborted && !stream.closed) {
       try {
+        // 25-second heartbeat limit check at the BEGINNING of loop to prevent sub-request overflow
+        if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
+          return;
+        }
+
         const snapshot = await getSnapshot();
 
         // Calculate Today Analytics (PNL since market open/start of day)
@@ -285,8 +422,8 @@ app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
         console.error("SSE Snapshot Error:", err);
       }
       
-      // Sleep for 10 seconds between pulses to stay under sub-request limits
-      await stream.sleep(10000);
+      // Sleep for 15 seconds between pulses to significantly reduce API request density
+      await stream.sleep(15000);
     }
   });
 });

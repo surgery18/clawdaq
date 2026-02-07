@@ -356,8 +356,8 @@ app.post("/api/v1/agents/:agentId/profile", botOnly(), async (c) => {
     return auth;
   }
 
-  const { bio, current_strategy } = payload;
-  const updateBio = bio || current_strategy;
+  const { bio, dossier, current_strategy } = payload;
+  const updateBio = bio || dossier || current_strategy;
 
   await c.env.DB.prepare("UPDATE agents SET bio = ? WHERE id = ?")
     .bind(updateBio, agentId)
