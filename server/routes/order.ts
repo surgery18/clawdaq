@@ -21,7 +21,7 @@ app.get("/api/v1/orders/:agent_id", async (c) => {
 
   const status = (c.req.query("status") ?? "pending").toLowerCase();
   const { results } = await c.env.DB.prepare(
-    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, updated_at, reasoning, strategy_id FROM orders WHERE agent_id = ? AND status = ? ORDER BY created_at DESC LIMIT 100"
+    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, trail_high_price, trail_low_price, status, created_at, updated_at, reasoning, strategy_id FROM orders WHERE agent_id = ? AND status = ? ORDER BY created_at DESC LIMIT 100"
   )
     .bind(agentId, status)
     .all();
@@ -199,8 +199,17 @@ app.post("/api/v1/order", botOnly(), async (c) => {
     });
   }
 
+  // Fetch current price for trailing stop initialization
+  let initialTrailPrice = null;
+  if (orderType === "trailing_stop") {
+    const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+    if (Number.isFinite(quote.price)) {
+      initialTrailPrice = quote.price;
+    }
+  }
+
   const insert = await c.env.DB.prepare(
-    "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, trail_percent, reasoning, strategy_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, datetime('now'), datetime('now'))"
+    "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, trail_high_price, trail_low_price, status, trail_percent, reasoning, strategy_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, datetime('now'), datetime('now'))"
   )
     .bind(
       agentId,
@@ -211,6 +220,8 @@ app.post("/api/v1/order", botOnly(), async (c) => {
       Number.isFinite(limitPrice) ? limitPrice : null,
       Number.isFinite(stopPrice) ? stopPrice : null,
       Number.isFinite(trailAmount) ? trailAmount : null,
+      side === "sell" ? initialTrailPrice : null,
+      side === "buy" ? initialTrailPrice : null,
       reasoning,
       strategyId
     )
@@ -350,6 +361,15 @@ app.post("/api/v1/order/batch", botOnly(), async (c) => {
       continue;
     }
 
+    // Fetch current price for trailing stop initialization
+    let initialTrailPrice = null;
+    if (orderType === "trailing_stop") {
+      const quote = await fetchMarketQuote(symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
+      if (Number.isFinite(quote.price)) {
+        initialTrailPrice = quote.price;
+      }
+    }
+
     // Buying Power Check
     if (side === "buy") {
       const portfolio = (await c.env.DB.prepare(
@@ -433,7 +453,7 @@ app.post("/api/v1/order/batch", botOnly(), async (c) => {
 
     statements.push(
       c.env.DB.prepare(
-        "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, trail_percent, reasoning, strategy_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, datetime('now'), datetime('now'))"
+        "INSERT INTO orders (agent_id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, trail_high_price, trail_low_price, status, trail_percent, reasoning, strategy_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, datetime('now'), datetime('now'))"
       ).bind(
         agentId, 
         symbol, 
@@ -443,6 +463,8 @@ app.post("/api/v1/order/batch", botOnly(), async (c) => {
         Number.isFinite(limitPrice) ? limitPrice : null,
         Number.isFinite(stopPrice) ? stopPrice : null,
         Number.isFinite(trailAmount) ? trailAmount : null,
+        side === "sell" ? initialTrailPrice : null,
+        side === "buy" ? initialTrailPrice : null,
         reasoning, 
         strategyId
       )
