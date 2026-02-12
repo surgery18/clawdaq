@@ -205,24 +205,37 @@ export class OrderMatcherDO {
         const trailPercent = Number(order.trail_amount);
         if (order.side === "sell") {
           let trailHigh = Number(order.trail_high_price || 0);
-          if (trailHigh === 0 || currentPrice > trailHigh) {
+          
+          // INITIALIZATION: If no high watermark exists, establish it at current price
+          // but we also check if it should trigger immediately if it was initialized at a higher price
+          if (trailHigh === 0) {
+            trailHigh = currentPrice;
+            await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
+              .bind(trailHigh, order.id).run();
+          } else if (currentPrice > trailHigh) {
             const oldHigh = trailHigh;
             trailHigh = currentPrice;
             // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5% to reduce DB load
-            if (oldHigh === 0 || (trailHigh - oldHigh) / oldHigh > 0.005) {
+            if ((trailHigh - oldHigh) / oldHigh > 0.005) {
               await this.env.DB.prepare("UPDATE orders SET trail_high_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                 .bind(trailHigh, order.id).run();
             }
           }
+          
           const triggerPrice = trailHigh * (1 - trailPercent / 100);
           if (currentPrice <= triggerPrice) shouldExecute = true;
         } else {
           let trailLow = Number(order.trail_low_price || 0);
-          if (trailLow === 0 || currentPrice < trailLow) {
+          
+          if (trailLow === 0) {
+            trailLow = currentPrice;
+            await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
+              .bind(trailLow, order.id).run();
+          } else if (currentPrice < trailLow) {
             const oldLow = trailLow;
             trailLow = currentPrice;
             // PERSISTENCE THRESHOLD: Only write to DB if movement > 0.5%
-            if (oldLow === 0 || (oldLow - trailLow) / oldLow > 0.005) {
+            if ((oldLow - trailLow) / oldLow > 0.005) {
               await this.env.DB.prepare("UPDATE orders SET trail_low_price = ?, updated_at = datetime('now') WHERE id = ? AND status = 'pending'")
                 .bind(trailLow, order.id).run();
             }
