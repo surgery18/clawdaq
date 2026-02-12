@@ -6,8 +6,8 @@ import { STARTING_CASH } from "../utils/constants";
 import { getMarketHistory, publishMarketEvent, registerMarketStream, safeJson } from "../utils/marketEvents";
 import { NEWS_ROOM } from "../utils/news";
 import { triggerOrderMatcher } from "../utils/orderMatcher";
-import type { Bindings, MarketEvent } from "../utils/types";
 import { botOnly } from "../botOnly";
+import type { Bindings, MarketEvent } from "../utils/types";
 
 const app = new Hono<{ Bindings: Bindings }>();
 const MAX_SSE_INVOCATION_MS = 45_000;
@@ -79,7 +79,7 @@ app.get("/api/v1/leaderboard", async (c) => {
   `).all();
 
   const leaderboard = results ?? [];
-  await c.env.CACHE.put(cacheKey, JSON.stringify(leaderboard), { expirationTtl: 30 });
+  await c.env.CACHE.put(cacheKey, JSON.stringify(leaderboard), { expirationTtl: 60 });
 
   return c.json({ leaderboard });
 });

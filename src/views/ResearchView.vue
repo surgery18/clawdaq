@@ -67,13 +67,15 @@ function loadChart(sym) {
         locale: 'en',
         toolbar_bg: '#fcf5e5',
         enable_publishing: false,
-        hide_side_toolbar: isMobile,
+        hide_side_toolbar: false,
         allow_symbol_change: true,
         save_image: false,
         container_id: 'tradingview-widget',
         backgroundColor: '#fcf5e5',
         gridColor: 'rgba(26, 26, 26, 0.05)',
         autosize: true,
+        disabled_features: ["header_screenshot", "header_symbol_search"],
+        enabled_features: ["study_templates"],
         overrides: {
           "paneProperties.background": "#fcf5e5",
           "paneProperties.backgroundType": "solid",
@@ -197,14 +199,16 @@ onBeforeUnmount(() => {
   padding: 10px;
   box-shadow: 10px 10px 0px #333;
   margin-bottom: 40px;
-  min-height: 450px;
+  height: 750px;
   width: 100%;
   box-sizing: border-box;
+  display: flex;
 }
 
 #tradingview-widget {
   width: 100%;
-  min-height: 450px;
+  height: 100%;
+  flex: 1;
 }
 
 .loading-state, .error-state {
