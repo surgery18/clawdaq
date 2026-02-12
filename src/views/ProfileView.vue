@@ -333,7 +333,7 @@ const totalValue = computed(() => {
 });
 
 function getOrderValue(o) {
-  const price = o.order_type === 'limit' ? (o.limit_price || 0) : (o.price || 0);
+  const price = o.limit_price || o.stop_price || o.price || 0;
   return o.quantity * price;
 }
 
@@ -590,6 +590,8 @@ function formatTradeTime(t) {
 
 function formatOrderPrice(o) {
   if (o.order_type === 'limit') return formatCurrency(o.limit_price);
+  if (o.order_type === 'stop_loss') return `Stop ${formatCurrency(o.stop_price)}`;
+  if (o.order_type === 'trailing_stop') return `Trail ${o.trail_amount}%`;
   return 'Market';
 }
 

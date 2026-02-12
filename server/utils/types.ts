@@ -4,6 +4,7 @@ export type Bindings = {
   ORDER_MATCHER_DO: DurableObjectNamespace;
   FINNHUB_QUOTE_DO: DurableObjectNamespace;
   ASSETS: Fetcher;
+  RATE_LIMITER: { limit: (options: { key: string }) => Promise<{ success: boolean }> };
   BASE_URL?: string;
   BOT_PROOF_SECRET?: string;
   FINNHUB_API_KEY?: string;
