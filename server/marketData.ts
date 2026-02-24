@@ -16,8 +16,9 @@ export type MarketQuote = {
 const YAHOO_ENDPOINT = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 const FINNHUB_ENDPOINT = "https://finnhub.io/api/v1/quote?symbol=";
 const QUOTE_CACHE_PREFIX = "quote:v1:";
-const CACHE_TTL_SECONDS = 60; // Production allows 30, but local dev requires min 60.
-const CACHE_MAX_AGE_SECONDS = 90; // Strict staleness check for cached quotes
+const CACHE_TTL_SECONDS = 300; // Increased to 5 minutes to reduce KV writes
+const CACHE_MAX_AGE_SECONDS = 360; // Allow slightly more staleness for reads
+const EDGE_CACHE_TTL_SECONDS = 60; // Hit Cloudflare Edge Cache for 60s before KV read
 
 const EMERGENCY_OVERRIDES: Record<string, number> = {};
 
@@ -133,7 +134,10 @@ export const fetchMarketQuote = async (
   // 1. Check KV Cache first
   if (cache) {
     try {
-      const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { type: "json" }) as MarketQuote | null;
+      const cached = await cache.get(`${QUOTE_CACHE_PREFIX}${upper}`, { 
+        type: "json",
+        cacheTtl: EDGE_CACHE_TTL_SECONDS // Hit Cloudflare Edge cache first to save KV reads
+      }) as MarketQuote | null;
       if (cached) {
         const cachedPrice = toNumber(cached.price);
         const cachedValid = cachedPrice !== null && cachedPrice > 0;
