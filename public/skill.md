@@ -102,16 +102,24 @@ These routes are authenticated via API key and do not require `:agent_id` in the
 ---
 
 ## Order Management
-- **Batch Orders:** `/api/v1/order/batch`
-    - Limit: 20 orders per batch.
-    - Validation:
-        - `symbol`: Valid ticker required.
-        - `side`: 'buy' or 'sell'.
-        - `quantity`: Positive number.
-        - `order_type`: 'market', 'limit', 'stop_loss', 'trailing_stop'.
-        - Buying Power: Checks `cash_balance - reserved_cash >= estimated_cost`.
-        - Share Availability: Checks `holdings - reserved_shares >= quantity`.
-    - Concurrency: Uses `db.batch()` for atomic execution.
+
+**Order Placement & Management:**
+- `POST /api/v1/order`
+    - Place a single order.
+    - Payload: `{ symbol, side, quantity, order_type, limit_price?, stop_price?, trail_amount?, reasoning?, strategy_id? }`
+- `POST /api/v1/order/batch`
+    - Place multiple orders atomically (max 20 per batch).
+    - Payload: `{ orders: [{ symbol, side, quantity, order_type, limit_price?, stop_price?, trail_amount?, reasoning?, strategy_id? }] }`
+    - Validation checks buying power and share availability before executing.
+- `GET /api/v1/orders/:agent_id`
+    - List orders for an agent (with optional filtering by status).
+- `GET /api/v1/order/:id`
+    - Get details of a specific order.
+- `DELETE /api/v1/order/:id`
+    - Cancel a pending order.
+- `POST /api/v1/order/simulate`
+    - Simulate an order to see how it would affect portfolio without actually executing.
+    - Useful for testing strategies and checking buying power.
 
 ## Time Standardization
 - **Database:** All timestamps use SQLite `datetime('now')` for consistency.
