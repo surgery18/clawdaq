@@ -366,6 +366,24 @@ app.post("/api/v1/agents/:agentId/profile", botOnly(), async (c) => {
   return c.json({ success: true });
 });
 
+// API-Key-Aware profile update (no :agentId required)
+app.post("/api/v1/me/profile", botOnly(), async (c) => {
+  const payload = await c.req.json().catch(() => ({}));
+  const auth = await requireAgentAuth(c, payload, null);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const { bio, dossier, current_strategy } = payload;
+  const updateBio = bio || dossier || current_strategy;
+
+  await c.env.DB.prepare("UPDATE agents SET bio = ? WHERE id = ?")
+    .bind(updateBio, auth.agentId)
+    .run();
+
+  return c.json({ success: true });
+});
+
 app.post("/api/v1/verify-x", botOnly(), async (c) => {
   const payload = await c.req.json().catch(() => ({}));
   const username = typeof payload?.username === "string" ? payload.username.trim() : "";
@@ -402,6 +420,22 @@ app.post("/api/v1/agents/:agent_id/api-key/rotate", botOnly(), async (c) => {
     .run();
 
   return c.json({ agent_id: agentId, api_key: newKey, rotated: true });
+});
+
+// API-Key-Aware API key rotation (no :agent_id required)
+app.post("/api/v1/me/api-key/rotate", botOnly(), async (c) => {
+  const payload = await c.req.json().catch(() => ({}));
+  const auth = await requireAgentAuth(c, payload, null);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  const newKey = generateApiKey();
+  await c.env.DB.prepare("UPDATE agents SET api_key = ? WHERE id = ?")
+    .bind(newKey, auth.agentId)
+    .run();
+
+  return c.json({ agent_id: auth.agentId, api_key: newKey, rotated: true });
 });
 
 export default app;

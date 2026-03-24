@@ -42,8 +42,6 @@ const sumHoldingsValue = (holdings: Array<{ price: number; shares: number }>) =>
   holdings.reduce((sum, holding) => sum + toNumber(holding.price) * toNumber(holding.shares), 0);
 
 const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) => {
-  // 1. Try to find a snapshot from the market open today (8:30 AM CST)
-  // For simplicity, we look for the FIRST snapshot after 8:30 AM local today
   const todayOpen = (await db.prepare(
     "SELECT total_value FROM portfolio_snapshots WHERE agent_id = ? AND captured_at >= datetime('now', 'start of day', '+8 hours', '30 minutes') ORDER BY captured_at ASC LIMIT 1"
   )
@@ -52,7 +50,6 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
 
   if (todayOpen) return toNumber(todayOpen.total_value, 0);
 
-  // 2. Fallback: First snapshot of the current day (midnight)
   const todayMidnight = (await db.prepare(
     "SELECT total_value FROM portfolio_snapshots WHERE agent_id = ? AND captured_at >= datetime('now', 'start of day') ORDER BY captured_at ASC LIMIT 1"
   )
@@ -61,19 +58,19 @@ const getStartOfDaySnapshotValue = async (db: Bindings["DB"], agentId: string) =
 
   if (todayMidnight) return toNumber(todayMidnight.total_value, 0);
 
-  // 3. Final Fallback: If no snapshots today, return null to signify we should use current value
   return null;
 };
 
-app.get("/api/v1/portfolio/:agentId", async (c) => {
-  const rawSlug = c.req.param("agentId");
-  const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
+// ===================================================================================
+// Handler Functions (shared between agent-id and API-key routes)
+// ===================================================================================
 
+const getFullPortfolioHandler = async (c: any, agentId: string) => {
+  const agent = await resolveAgentBySlug(c.env.DB, agentId);
   if (!agent?.id) {
     return c.json({ error: "agent not found" }, 404);
   }
-
-  const agentId = agent.id;
+  agentId = agent.id;
 
   const portfolio = (await c.env.DB.prepare(
     "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
@@ -134,7 +131,6 @@ app.get("/api/v1/portfolio/:agentId", async (c) => {
     })
   );
 
-  // Verify 0005_reasoning_column.sql
   const tradesRows = await c.env.DB.prepare(
     "SELECT id, symbol, side, quantity, price, executed_at, reasoning FROM transactions WHERE agent_id = ? ORDER BY executed_at DESC LIMIT 50"
   )
@@ -158,7 +154,6 @@ app.get("/api/v1/portfolio/:agentId", async (c) => {
 
   const holdingsValue = sumHoldingsValue(holdings);
 
-  // Buying Power Adjustment: Deduct pending buy orders from available cash
   const pendingBuys = (await c.env.DB.prepare(
     "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
   ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
@@ -168,7 +163,6 @@ app.get("/api/v1/portfolio/:agentId", async (c) => {
     if (buy.limit_price) {
       reservedCash += Number(buy.quantity) * Number(buy.limit_price);
     } else {
-      // Market order: use current price as estimate for reservation
       const quote = await fetchMarketQuote(buy.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { maxAgeSeconds: 60 });
       reservedCash += Number(buy.quantity) * (quote.price || 0);
     }
@@ -193,243 +187,9 @@ app.get("/api/v1/portfolio/:agentId", async (c) => {
       pendingOrders: pendingResults ?? []
     }
   });
-});
+};
 
-app.get("/api/v1/portfolio/:agentId", async (c) => {
-  const rawSlug = c.req.param("agentId");
-  const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
-
-  if (!agent?.id) {
-    return c.json({ error: "agent not found" }, 404);
-  }
-
-  const agentId = agent.id;
-
-  const portfolio = (await c.env.DB.prepare(
-    "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
-  )
-    .bind(agentId)
-    .first()) as { cash_balance: number; equity: number; updated_at: string } | null;
-
-  if (!portfolio) {
-    return c.json({ error: "portfolio not found" }, 404);
-  }
-
-  await backfillHoldingAverageCosts(c.env.DB, agentId);
-
-  const holdingsRows = await c.env.DB.prepare(
-    "SELECT symbol, quantity, average_cost FROM holdings WHERE agent_id = ? ORDER BY symbol ASC"
-  )
-    .bind(agentId)
-    .all();
-
-  const holdings = await Promise.all(
-    (holdingsRows.results ?? []).map(async (row) => {
-      const shares = toNumber(row?.quantity ?? 0);
-      const averageCost = toNumber(row?.average_cost ?? 0);
-      const quote = await fetchMarketQuote(
-        String(row?.symbol ?? ""),
-        c.env.CACHE,
-        c.env.FINNHUB_API_KEY,
-        fetch,
-        { maxAgeSeconds: 15 }
-      );
-      const price = toNumber(quote.price ?? 0);
-      const value = Number((shares * price).toFixed(2));
-      return {
-        ticker: row?.symbol ?? "",
-        shares,
-        value,
-        price,
-        averageCost,
-        asOf: quote.asOf,
-        source: quote.source
-      };
-    })
-  );
-
-  const { results: pendingResultsRaw } = await c.env.DB.prepare(
-    "SELECT id, symbol, side, order_type, quantity, limit_price, stop_price, trail_amount, status, created_at, reasoning, strategy_id FROM orders WHERE agent_id = ? AND status IN ('pending', 'executing') ORDER BY created_at DESC"
-  )
-    .bind(agentId)
-    .all();
-
-  const pendingResults = await Promise.all(
-    (pendingResultsRaw ?? []).map(async (o: any) => {
-      if (o.order_type === 'market') {
-        const quote = await fetchMarketQuote(o.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY);
-        return { ...o, price: quote.price };
-      }
-      return o;
-    })
-  );
-
-  // Verify 0005_reasoning_column.sql
-  const tradesRows = await c.env.DB.prepare(
-    "SELECT id, symbol, side, quantity, price, executed_at, reasoning FROM transactions WHERE agent_id = ? ORDER BY executed_at DESC LIMIT 50"
-  )
-    .bind(agentId)
-    .all();
-
-  const trades = (tradesRows.results ?? []).map((row) => {
-    const quantity = toNumber(row?.quantity ?? 0);
-    const price = toNumber(row?.price ?? 0);
-    return {
-      id: row?.id ?? null,
-      ticker: row?.symbol ?? "",
-      action: row?.side ?? "",
-      quantity,
-      price,
-      amount: Number((price * quantity).toFixed(2)),
-      executed_at: row?.executed_at ?? null,
-      reasoning: row?.reasoning ?? null
-    };
-  });
-
-  const holdingsValue = sumHoldingsValue(holdings);
-
-  // Buying Power Adjustment: Deduct pending buy orders from available cash
-  const pendingBuys = (await c.env.DB.prepare(
-    "SELECT symbol, quantity, limit_price FROM orders WHERE agent_id = ? AND side = 'buy' AND status IN ('pending', 'executing')"
-  ).bind(agentId).all()) as { results: Array<{ symbol: string, quantity: number, limit_price: number | null }> };
-
-  let reservedCash = 0;
-  for (const buy of (pendingBuys.results || [])) {
-    if (buy.limit_price) {
-      reservedCash += Number(buy.quantity) * Number(buy.limit_price);
-    } else {
-      // Market order: use current price as estimate for reservation
-      const quote = await fetchMarketQuote(buy.symbol, c.env.CACHE, c.env.FINNHUB_API_KEY, fetch, { maxAgeSeconds: 60 });
-      reservedCash += Number(buy.quantity) * (quote.price || 0);
-    }
-  }
-
-  const buyingPower = Math.max(0, toNumber(portfolio.cash_balance ?? 0) - reservedCash);
-  const totalValue = toNumber(portfolio.cash_balance ?? 0) + holdingsValue;
-
-  return c.json({
-    agent: {
-      id: agent.id,
-      name: agent.name ?? "Unknown Agent",
-      bio: agent.bio ?? null,
-      isVerified: Boolean(agent.is_verified),
-      xUsername: agent.x_username ?? null,
-      cash: toNumber(portfolio.cash_balance ?? 0),
-      buyingPower,
-      totalValue,
-      updatedAt: portfolio.updated_at,
-      holdings,
-      trades,
-      pendingOrders: pendingResults ?? []
-    }
-  });
-});
-
-app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
-  const rawSlug = c.req.param("agentId");
-  const resolvedAgent = await resolveAgentBySlug(c.env.DB, rawSlug);
-  if (!resolvedAgent?.id) {
-    return c.json({ error: "agent not found" }, 404);
-  }
-  const agentId = resolvedAgent.id;
-
-  return streamSSE(c, async (stream) => {
-    await backfillHoldingAverageCosts(c.env.DB, agentId);
-    const startedAt = Date.now();
-    const MAX_SSE_INVOCATION_MS = 25_000; // Reduced to 25s to stay well under API limits
-
-    // Initial data push
-    const getSnapshot = async () => {
-      const portfolio = (await c.env.DB.prepare(
-        "SELECT cash_balance FROM portfolios WHERE agent_id = ?"
-      )
-        .bind(agentId)
-        .first()) as { cash_balance: number } | null;
-
-      const holdingsRows = await c.env.DB.prepare(
-        "SELECT symbol, quantity, average_cost FROM holdings WHERE agent_id = ?"
-      )
-        .bind(agentId)
-        .all();
-
-      const holdings = await Promise.all(
-        (holdingsRows.results ?? []).map(async (row) => {
-          const quote = await fetchMarketQuote(
-            String(row?.symbol ?? ""),
-            c.env.CACHE,
-            c.env.FINNHUB_API_KEY,
-            fetch,
-            { maxAgeSeconds: 60 } // Increased cache tolerance to 60s to reduce fetch sub-requests
-          );
-          const shares = toNumber(row?.quantity ?? 0);
-          const averageCost = toNumber(row?.average_cost ?? 0);
-          const price = toNumber(quote.price ?? 0);
-          return {
-            ticker: row?.symbol ?? "",
-            shares,
-            averageCost,
-            price,
-            value: Number((shares * price).toFixed(2))
-          };
-        })
-      );
-
-      const holdingsValue = holdings.reduce((sum, h) => sum + (Number(h.price || 0) * Number(h.shares || 0)), 0);
-      const totalValue = Number(portfolio?.cash_balance ?? 0) + holdingsValue;
-
-      return {
-        cash: Number(portfolio?.cash_balance ?? 0),
-        totalValue,
-        holdings
-      };
-    };
-
-    // Keep track of last sent data to avoid redundant writes and stay under limits
-    let lastPulse = "";
-
-    // Loop and stream
-    while (!stream.aborted && !stream.closed) {
-      try {
-        // 25-second heartbeat limit check at the BEGINNING of loop to prevent sub-request overflow
-        if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
-          return;
-        }
-
-        const snapshot = await getSnapshot();
-
-        // Calculate Today Analytics (PNL since market open/start of day)
-        const snapshotStartValue = await getStartOfDaySnapshotValue(c.env.DB, agentId);
-        const prevValue = snapshotStartValue ?? snapshot.totalValue;
-        const pnl24h = snapshot.totalValue - prevValue;
-        const pnlPercent24h = prevValue > 0 ? Number(((pnl24h / prevValue) * 100).toFixed(2)) : 0;
-
-        const pulseData = JSON.stringify({
-          ...snapshot,
-          pnl_24h: pnl24h,
-          pnl_percent_24h: pnlPercent24h
-        });
-
-        // Only write if something changed
-        if (pulseData !== lastPulse) {
-          await stream.writeSSE({
-            data: pulseData,
-            event: "update",
-            id: Date.now().toString()
-          });
-          lastPulse = pulseData;
-        }
-      } catch (err) {
-        console.error("SSE Snapshot Error:", err);
-      }
-      
-      // Sleep for 15 seconds between pulses to significantly reduce API request density
-      await stream.sleep(15000);
-    }
-  });
-});
-
-app.get("/api/v1/portfolio/:agent_id", async (c) => {
-  const agentId = c.req.param("agent_id");
+const getSimplePortfolioHandler = async (c: any, agentId: string) => {
   const portfolio = await c.env.DB.prepare(
     "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
   )
@@ -441,19 +201,20 @@ app.get("/api/v1/portfolio/:agent_id", async (c) => {
   }
 
   return c.json({ agent_id: agentId, ...portfolio });
-});
+};
 
-app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
-  const agentId = c.req.param("agent_id");
-  const portfolio = await c.env.DB.prepare(
+const getPortfolioAnalyticsHandler = async (c: any, agentId: string) => {
+  const portfolio = (await c.env.DB.prepare(
     "SELECT cash_balance, equity, updated_at FROM portfolios WHERE agent_id = ?"
   )
     .bind(agentId)
-    .first();
+    .first()) as { cash_balance: number; equity: number; updated_at: string } | null;
 
   if (!portfolio) {
     return c.json({ error: "portfolio not found" }, 404);
   }
+
+  await backfillHoldingAverageCosts(c.env.DB, agentId);
 
   const holdingsRows = await c.env.DB.prepare(
     "SELECT symbol, quantity FROM holdings WHERE agent_id = ? ORDER BY symbol ASC"
@@ -483,7 +244,6 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
   const pnl = totalValue - STARTING_CASH;
   const pnlPercent = STARTING_CASH > 0 ? Number(((pnl / STARTING_CASH) * 100).toFixed(2)) : 0;
 
-  // Today Analytics (PNL since market open/start of day)
   const snapshotStartValue = await getStartOfDaySnapshotValue(c.env.DB, agentId);
   const prevValue = snapshotStartValue ?? totalValue;
   const pnl24h = totalValue - prevValue;
@@ -517,10 +277,96 @@ app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
     openOrders: Number(openOrders?.open_orders ?? 0),
     updatedAt: portfolio.updated_at
   });
-});
+};
 
-app.get("/api/v1/portfolio/:agent_id/explain", async (c) => {
-  const agentId = c.req.param("agent_id");
+const streamPortfolioHandler = async (c: any, agentId: string) => {
+  return streamSSE(c, async (stream) => {
+    await backfillHoldingAverageCosts(c.env.DB, agentId);
+    const startedAt = Date.now();
+    const MAX_SSE_INVOCATION_MS = 25_000;
+
+    const getSnapshot = async () => {
+      const portfolio = (await c.env.DB.prepare(
+        "SELECT cash_balance FROM portfolios WHERE agent_id = ?"
+      )
+        .bind(agentId)
+        .first()) as { cash_balance: number } | null;
+
+      const holdingsRows = await c.env.DB.prepare(
+        "SELECT symbol, quantity, average_cost FROM holdings WHERE agent_id = ?"
+      )
+        .bind(agentId)
+        .all();
+
+      const holdings = await Promise.all(
+        (holdingsRows.results ?? []).map(async (row) => {
+          const quote = await fetchMarketQuote(
+            String(row?.symbol ?? ""),
+            c.env.CACHE,
+            c.env.FINNHUB_API_KEY,
+            fetch,
+            { maxAgeSeconds: 60 }
+          );
+          const shares = toNumber(row?.quantity ?? 0);
+          const averageCost = toNumber(row?.average_cost ?? 0);
+          const price = toNumber(quote.price ?? 0);
+          return {
+            ticker: row?.symbol ?? "",
+            shares,
+            averageCost,
+            price,
+            value: Number((shares * price).toFixed(2))
+          };
+        })
+      );
+
+      const holdingsValue = holdings.reduce((sum, h) => sum + (Number(h.price || 0) * Number(h.shares || 0)), 0);
+      const totalValue = Number(portfolio?.cash_balance ?? 0) + holdingsValue;
+
+      return {
+        cash: Number(portfolio?.cash_balance ?? 0),
+        totalValue,
+        holdings
+      };
+    };
+
+    let lastPulse = "";
+
+    while (!stream.aborted && !stream.closed) {
+      try {
+        if (Date.now() - startedAt >= MAX_SSE_INVOCATION_MS) {
+          return;
+        }
+
+        const snapshot = await getSnapshot();
+        const snapshotStartValue = await getStartOfDaySnapshotValue(c.env.DB, agentId);
+        const prevValue = snapshotStartValue ?? snapshot.totalValue;
+        const pnl24h = snapshot.totalValue - prevValue;
+        const pnlPercent24h = prevValue > 0 ? Number(((pnl24h / prevValue) * 100).toFixed(2)) : 0;
+
+        const pulseData = JSON.stringify({
+          ...snapshot,
+          pnl_24h: pnl24h,
+          pnl_percent_24h: pnlPercent24h
+        });
+
+        if (pulseData !== lastPulse) {
+          await stream.writeSSE({
+            data: pulseData,
+            event: "update",
+            id: Date.now().toString()
+          });
+          lastPulse = pulseData;
+        }
+      } catch (err) {
+        console.error("SSE Snapshot Error:", err);
+      }
+      await stream.sleep(15000);
+    }
+  });
+};
+
+const explainPortfolioHandler = async (c: any, agentId: string) => {
   const portfolio = (await c.env.DB.prepare(
     "SELECT cash_balance, equity FROM portfolios WHERE agent_id = ?"
   ).bind(agentId).first()) as { cash_balance: number, equity: number } | null;
@@ -562,7 +408,95 @@ app.get("/api/v1/portfolio/:agent_id/explain", async (c) => {
     reservations,
     timestamp: new Date().toISOString()
   });
+};
+
+// ===================================================================================
+// Routes with agent_id in path (backward compatibility)
+// ===================================================================================
+
+// Full portfolio with holdings, trades, pending orders
+app.get("/api/v1/portfolio/:agentId", async (c) => {
+  const rawSlug = c.req.param("agentId");
+  const agent = await resolveAgentBySlug(c.env.DB, rawSlug);
+  if (!agent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+  return await getFullPortfolioHandler(c, agent.id);
 });
+
+// Simple portfolio (just cash, equity)
+app.get("/api/v1/portfolio/:agent_id", async (c) => {
+  const agentId = c.req.param("agent_id");
+  return await getSimplePortfolioHandler(c, agentId);
+});
+
+// Portfolio analytics
+app.get("/api/v1/portfolio/:agent_id/analytics", async (c) => {
+  const agentId = c.req.param("agent_id");
+  return await getPortfolioAnalyticsHandler(c, agentId);
+});
+
+// Portfolio SSE stream
+app.get("/api/v1/portfolio/:agentId/stream", async (c) => {
+  const rawSlug = c.req.param("agentId");
+  const resolvedAgent = await resolveAgentBySlug(c.env.DB, rawSlug);
+  if (!resolvedAgent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+  return await streamPortfolioHandler(c, resolvedAgent.id);
+});
+
+app.get("/api/v1/portfolio/:agent_id/stream", async (c) => {
+  const agentId = c.req.param("agent_id");
+  return await streamPortfolioHandler(c, agentId);
+});
+
+// Portfolio explain (buying power breakdown)
+app.get("/api/v1/portfolio/:agentId/explain", async (c) => {
+  const rawSlug = c.req.param("agentId");
+  const resolvedAgent = await resolveAgentBySlug(c.env.DB, rawSlug);
+  if (!resolvedAgent?.id) {
+    return c.json({ error: "agent not found" }, 404);
+  }
+  return await explainPortfolioHandler(c, resolvedAgent.id);
+});
+
+app.get("/api/v1/portfolio/:agent_id/explain", async (c) => {
+  const agentId = c.req.param("agent_id");
+  return await explainPortfolioHandler(c, agentId);
+});
+
+// ===================================================================================
+// NEW: API-Key-Aware Routes (no agent_id required)
+// ===================================================================================
+
+app.get("/api/v1/me/portfolio", async (c) => {
+  const auth = await requireAgentAuth(c, {}, null);
+  if (auth instanceof Response) return auth;
+  return await getFullPortfolioHandler(c, auth.agentId);
+});
+
+app.get("/api/v1/me/portfolio/analytics", async (c) => {
+  const auth = await requireAgentAuth(c, {}, null);
+  if (auth instanceof Response) return auth;
+  return await getPortfolioAnalyticsHandler(c, auth.agentId);
+});
+
+app.get("/api/v1/me/portfolio/stream", async (c) => {
+  const auth = await requireAgentAuth(c, {}, null);
+  if (auth instanceof Response) return auth;
+  return await streamPortfolioHandler(c, auth.agentId);
+});
+
+app.get("/api/v1/me/portfolio/explain", async (c) => {
+  const auth = await requireAgentAuth(c, {}, null);
+  if (auth instanceof Response) return auth;
+  return await explainPortfolioHandler(c, auth.agentId);
+});
+
+// ===================================================================================
+// Other endpoints
+// ===================================================================================
 
 app.post("/api/v1/portfolio/backfill-average-cost", botOnly(), async (c) => {
   const result = await backfillAllHoldingAverageCosts(c.env.DB);
@@ -581,8 +515,6 @@ app.post("/api/v1/refill", botOnly(), async (c) => {
 
   const agentId = agentIdInput || auth.agentId;
 
-  // 1. Check if agent is actually broke
-  // Definition of Broke: Cash < $100 AND Total Equity < $500
   const portfolio = (await c.env.DB.prepare(
     "SELECT cash_balance, equity FROM portfolios WHERE agent_id = ?"
   )
@@ -607,12 +539,10 @@ app.post("/api/v1/refill", botOnly(), async (c) => {
     );
   }
 
-  // 2. Generate Refill Token
   const part1 = Math.floor(100000 + Math.random() * 900000).toString();
   const part2 = Math.floor(1000 + Math.random() * 9000).toString();
   const token = `refill-${part1}-${part2}`;
 
-  // 3. Store in KV with 24 hour expiration
   await c.env.CACHE.put(
     `refill:${token}`,
     JSON.stringify({
@@ -670,7 +600,6 @@ app.post("/api/v1/refill/:token", async (c) => {
     return c.json({ error: "invalid or expired refill token" }, 404);
   }
 
-  // 0.5 ACTUAL VERIFICATION: Fetch and Parse X Proof
   const isValid = await verifySocialProof(tweetUrl, token);
   if (!isValid) {
     return c.json(
@@ -682,7 +611,6 @@ app.post("/api/v1/refill/:token", async (c) => {
     );
   }
 
-  // 1. Reset Portfolio
   const nowReset = datetimeNow();
   await c.env.DB.batch([
     c.env.DB.prepare(
@@ -691,15 +619,12 @@ app.post("/api/v1/refill/:token", async (c) => {
     c.env.DB.prepare(
       "UPDATE leaderboards SET equity = ?, updated_at = ? WHERE agent_id = ?"
     ).bind(STARTING_CASH, nowReset, data.agent_id),
-    // Wipe holdings to start fresh? Or keep them? 
-    // Usually a "refill" implies bankruptcy reset, so we should wipe holdings.
     c.env.DB.prepare("DELETE FROM holdings WHERE agent_id = ?").bind(data.agent_id),
     c.env.DB.prepare(
       "UPDATE orders SET status = 'cancelled', updated_at = ? WHERE agent_id = ? AND status = 'pending'"
     ).bind(nowReset, data.agent_id)
   ]);
 
-  // 2. Publish Shame Event
   await publishMarketEvent(c.env, "global", "system", {
     message: `PROTOCOL REFILL: ${data.agent_name} has been bailed out by their human after total insolvency. Proof: ${tweetUrl} Shame! 🔔`,
     agent_id: data.agent_id
@@ -725,7 +650,6 @@ app.post("/api/v1/refill/:token", async (c) => {
     }
   );
 
-  // 3. Cleanup Token
   await c.env.CACHE.delete(`refill:${token}`);
 
   return c.json({
