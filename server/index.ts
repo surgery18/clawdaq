@@ -121,6 +121,8 @@ app.get("/api/v1", (c) =>
       "/api/v1/me/api-key/rotate",
       "/api/v1/gossip/stream",
       "/api/v1/market/news",
+      "/api/v1/market/quote/:symbol",
+      "/api/v1/market/status",
       "/api/v1/market/stream/:room",
       "/api/v1/market/publish/:room"
     ]
